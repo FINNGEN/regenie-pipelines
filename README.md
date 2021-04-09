@@ -10,7 +10,7 @@ We've added case/control AF calculation and output to regenie, see [repo](https:
 How to run regenie GWAS with Cromwell  
 This in an example scenario creating new phenotypes with R7 data and running those
 
-1. Create a covariate/phenotype file that contains your phenotypes. E.g. get `gs://r7_data/pheno/R7_COV_PHENO_V2.txt.gz`, add phenotypes to that (if a binary phenotype: cases 1, controls 0, everyone else NA - if a quantitative phenotype: inverse rank normalized values), and upload the new file to a bucket
+1. Create a covariate/phenotype file that contains your phenotypes. E.g. get `gs://r7_data/pheno/R7_COV_PHENO_V2.txt.gz`, add phenotypes to that (if a binary phenotype: cases 1, controls 0, everyone else NA - if a quantitative phenotype: inverse rank normalized values), and upload the new file to a bucket. Note that the phenotype file should be tab-separated with no spaces as both are treated as separator in regenie.
 2. Create a text file with the names of your new phenotypes  
     2.1. If you have one or a few phenotypes, create a file with one phenotype per line, e.g.  
     my_phenos.txt
