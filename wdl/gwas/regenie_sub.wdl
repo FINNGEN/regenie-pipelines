@@ -53,7 +53,7 @@ task step2 {
         cpu: if length(phenolist) == 1 then 1 else if length(phenolist) <=4 then 2 else if length(phenolist) <= 10 then 4 else if length(phenolist) < 16 then 8 else 16
         memory: if length(phenolist) <= 2 then "4 GB" else "6 GB"
         disks: "local-disk " + (ceil(size(bgen, "G")) + 5) + " HDD"
-        zones: "europe-west1-b"
+        zones: "europe-west1-b europe-west1-c europe-west1-d"
         preemptible: 2
         noAddress: true
     }
@@ -125,7 +125,7 @@ task gather {
         cpu: 1
         memory: "6 GB"
         disks: "local-disk 200 HDD"
-        zones: "europe-west1-b"
+        zones: "europe-west1-b europe-west1-c europe-west1-d"
         preemptible: 2
         noAddress: true
     }
@@ -271,7 +271,7 @@ task summary{
         cpu: 1
         memory: "2 GB"
         disks: "local-disk 200 HDD"
-        zones: "europe-west1-b"
+        zones: "europe-west1-b europe-west1-c europe-west1-d"
         preemptible: 2
     }
 }
