@@ -3,6 +3,7 @@ task step2 {
     Array[String] phenolist
     File cov_pheno
     String covariates
+    String test
     Boolean is_binary
     File bgen
     File bgi = bgen + ".bgi"
@@ -26,6 +27,7 @@ task step2 {
 
         regenie \
         --step 2 \
+        --test ${test} \
         ${if is_binary then "--bt --af-cc" else ""} \
         --bgen ${bgen} \
         --ref-first \
