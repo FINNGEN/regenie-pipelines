@@ -12,7 +12,7 @@
     "regenie.sub_step1.step1.options": "",
 
     "regenie.sub_step2.bgenlist": "gs://r7_data/bgen/R7_bgen.txt",
-    "regenie.sub_step2.step2.test": "recessive",
+    "regenie.sub_step2.step2.test": "additive",
     "regenie.sub_step2.step2.bsize": 400,
     "regenie.sub_step2.step2.options": "--firth --approx --pThresh 0.01 --firth-se",
 
