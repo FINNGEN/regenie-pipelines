@@ -8,7 +8,7 @@ task step2 {
     File bgi = bgen + ".bgi"
     File sample = bgen + ".sample"
     File pred
-    String prefix = sub(basename(pred), "_pred.list", "") + "___" + basename(bgen)
+    String prefix = sub(basename(pred), "_pred.list", "") + "." + basename(bgen)
     Array[File] loco
     Int bsize
     String options
@@ -61,7 +61,6 @@ task step2 {
 
 task gather {
 
-    String pheno
     Boolean is_binary
     Array[File] files
 
@@ -71,49 +70,52 @@ task gather {
 
         set -euxo pipefail
 
-        echo -e "`date`\tconcatenating result pieces into ${pheno}.regenie.gz, sorting by chr pos just in case"
+        pheno=`basename ${files[0]} .regenie.gz | awk -F "." '{sub(/[^_]*_/, "", $NF); print $NF}'`
+        mkdir regenie munged
+
+        echo -e "`date`\tconcatenating result pieces into regenie/$pheno.regenie.gz, sorting by chr pos just in case"
         cat \
         <(zcat ${files[0]} | head -1) \
         <(for file in ${sep=" " files}; do
             zcat $file | tail -n+2
-        done | sort -k1,1g -k2,2g) | bgzip > ${pheno}.regenie.gz
+        done | sort -k1,1g -k2,2g) | bgzip > regenie/$pheno.regenie.gz
 
         if [[ "${is_binary}" == "true" ]]; then
-            echo -e "`date`\tconverting to ${pheno}.gz to a format used for importing to pheweb, omitting variants with -log10p NA (unsuccessful Firth/SPA)"
-            zcat ${pheno}.regenie.gz | awk '
+            echo -e "`date`\tconverting to munged/$pheno.gz to a format used for importing to pheweb, omitting variants with -log10p NA (unsuccessful Firth/SPA)"
+            zcat regenie/$pheno.regenie.gz | awk '
             BEGIN {FS=" "; OFS="\t"; split("CHROM GENPOS ALLELE0 ALLELE1 LOG10P BETA SE A1FREQ A1FREQ_CASES A1FREQ_CONTROLS", REQUIRED_FIELDS)}
             NR==1 {for(i=1;i<=NF;i++) h[$i]=i;
                    for(i in REQUIRED_FIELDS) if (!(REQUIRED_FIELDS[i] in h)) {print REQUIRED_FIELDS[i]" expected in regenie header">>"/dev/stderr"; exit 1}
                    print "#chrom","pos","ref","alt","pval","mlogp","beta","sebeta","af_alt","af_alt_cases","af_alt_controls"}
             NR>1 && $h["LOG10P"]!="NA" {print $h["CHROM"],$h["GENPOS"],$h["ALLELE0"],$h["ALLELE1"],10^-$h["LOG10P"],$h["LOG10P"],$h["BETA"],$h["SE"],$h["A1FREQ"],$h["A1FREQ_CASES"],$h["A1FREQ_CONTROLS"]}' \
-            | bgzip > ${pheno}.gz
+            | bgzip > munged/$pheno.gz
         else
-            echo -e "`date`\tconverting to ${pheno}.gz to a format used for importing to pheweb"
-            zcat ${pheno}.regenie.gz | awk '
+            echo -e "`date`\tconverting to munged/$pheno.gz to a format used for importing to pheweb"
+            zcat regenie/$pheno.regenie.gz | awk '
             BEGIN {FS=" "; OFS="\t"; split("CHROM GENPOS ALLELE0 ALLELE1 LOG10P BETA SE A1FREQ", REQUIRED_FIELDS)}
             NR==1 {for(i=1;i<=NF;i++) h[$i]=i;
                    for(i in REQUIRED_FIELDS) if (!(REQUIRED_FIELDS[i] in h)) {print REQUIRED_FIELDS[i]" expected in regenie header">>"/dev/stderr"; exit 1}
                    print "#chrom","pos","ref","alt","pval","mlogp","beta","sebeta","af_alt"}
             NR>1  {print $h["CHROM"],$h["GENPOS"],$h["ALLELE0"],$h["ALLELE1"],10^-$h["LOG10P"],$h["LOG10P"],$h["BETA"],$h["SE"],$h["A1FREQ"]}' \
-            | bgzip > ${pheno}.gz
+            | bgzip > munged/$pheno.gz
         fi
 
         echo -e "`date`\tprinting only chr, pos, pval to speed up and reduce memory use of qqplot.R"
-        zcat ${pheno}.gz | cut -f1,2,5 > ${pheno}
+        zcat munged/$pheno.gz | cut -f1,2,5 > $pheno
 
         echo -e "`date`\trunning qqplot.R"
-        qqplot.R --file ${pheno} --chrcol "#chrom" --bp_col "pos" --pval_col "pval" --loglog_pval 10 > qq_out 2> qq_err
+        qqplot.R --file $pheno --chrcol "#chrom" --bp_col "pos" --pval_col "pval" --loglog_pval 10 > qq_out 2> qq_err
 
-        echo -e "`date`\ttabixing ${pheno}.gz"
-        tabix -s1 -b2 -e2 ${pheno}.gz
+        echo -e "`date`\ttabixing munged/$pheno.gz"
+        tabix -s1 -b2 -e2 munged/$pheno.gz
         echo -e "`date`\tdone"
 
     >>>
 
     output {
-        File regenie = pheno + ".regenie.gz"
-        File pheweb = pheno + ".gz"
-        File pheweb_tbi = pheno + ".gz.tbi"
+        File regenie = glob("regenie/*.regenie.gz")[0]
+        File pheweb = glob("munged/*.gz")[0]
+        File pheweb_tbi = glob("munged/*.gz.tbi")[0]
         File qq_out = "qq_out"
         File qq_err = "qq_err"
         Array[File] pngs = glob("*.png")
@@ -140,8 +142,6 @@ task summary{
     File gnomad_tbi = gnomad_annotation + ".tbi"
 
     Float pval_thresh
-    String pheno
-    String output_name=pheno+"_summary.txt"
     String docker
 
     command <<<
@@ -153,12 +153,12 @@ task summary{
         gnomad_annotation_file  = "${gnomad_annotation}"
         sig_threshold = ${pval_thresh}
 
-        output_name = "${output_name}"
-
         import pysam
         import gzip
+        import os
         from typing import NamedTuple
 
+        output_name = os.path.splitext(os.path.basename(fname))[0] + "_summary.txt"
         FGAnnotation = NamedTuple('FGAnnotation',[('gene',str),('consequence',str)])
         GnomadAnnotation = NamedTuple('GnomadAnnotation',[('finaf',str),('nfeaf',str),('rsid',str)])
 
@@ -263,7 +263,7 @@ task summary{
     >>>
 
     output {
-        File out = output_name
+        File out = glob("*_summary.txt")[0]
     }
 
     runtime {
@@ -297,12 +297,12 @@ workflow regenie_step2 {
     }
 
     Array[Array[String]] pheno_results = transpose(step2.regenie)
-    scatter (i in range(length(phenolist))) {
+    scatter (pheno_result in pheno_results) {
         call gather {
-            input: pheno=phenolist[i], is_binary=is_binary, files=pheno_results[i]
+            input: is_binary=is_binary, files=pheno_result
         }
         call summary {
-            input: pheno=phenolist[i], input_file=gather.pheweb
+            input: input_file=gather.pheweb
         }
     }
 
