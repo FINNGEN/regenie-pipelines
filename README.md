@@ -25,14 +25,15 @@ This in an example scenario creating new phenotypes with R7 data and running tho
     PHENO1  PHENO2  PHENO3  PHENO4  PHENO5
     PHENO6  PHENO7
     ```
-    and upload the file to a bucket. Phenotypes on each row will be analyzed together as regenie step 1 is faster that way. Non-shared missing phenotypes for phenotypes on each row will be mean-imputed for level 0 regression and this is why the phenotypes on each row should have low non-shared missingness.
+    and upload the file to a bucket. Phenotypes on each row will be analyzed together as regenie step 1 is faster that way. Non-shared missing phenotypes for phenotypes on each row will be mean-imputed for level 0 regression and this is why the phenotypes on each row should have low non-shared missingness. It's recommended to analyze at most 8 phenotypes together because the number of vCPUs used grows with the number of phenotypes and we've observed high preemption rates with VMs with more than 8 vCPUs.
 3. Clone this repo: `git clone https://github.com/FINNGEN/regenie-pipelines`
 4. Edit the input file `regenie-pipelines/wdl/gwas/regenie.json`:  
     5.1. Change `regenie.cov_pheno` to the file you created in the first step  
     5.2. Change `regenie.phenolist` to the file you created in the second step  
     5.3. `regenie.is_binary` should be `true` for binary phenotypes and `false` for quantitative phenotypes  
-    5.4. Change `regenie.covariates` and `regenie.sub_step2.step2.options` as needed
-5. Cromwell requires subworkflows be zipped: `cd regenie-pipelines/wdl/gwas/ && zip regenie_sub regenie_sub.wdl`
+    5.4. `regenie.sub_step2.step2.test` can be `additive`, `recessive` or `dominant` depending on which analysis you want to run  
+    5.5. Change `regenie.covariates` and `regenie.sub_step2.step2.options` as needed
+5. Cromwell requires subworkflows be zipped: `cd regenie-pipelines/wdl/gwas/ && zip regenie_sub regenie_step1.wdl regenie_sub.wdl`
 6. Connect to Cromwell server  
     `gcloud compute ssh cromwell-fg-1 --project finngen-refinery-dev --zone europe-west1-b -- -fN -L localhost:5000:localhost:80`
 7. Submit workflow  
