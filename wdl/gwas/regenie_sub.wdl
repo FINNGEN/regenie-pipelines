@@ -4,6 +4,8 @@ task step2 {
     File cov_pheno
     String covariates
     String test
+    # regenie accepts either no test specified (i.e. additive), or '--test dominant' or '--test recessive'. '--test additive' is an error.
+    String test_cmd = if test == "additive" then "" else "--test "+ test
     Boolean is_binary
     File bgen
     File bgi = bgen + ".bgi"
@@ -27,7 +29,7 @@ task step2 {
 
         regenie \
         --step 2 \
-        --test ${test} \
+        ${test_cmd} \
         ${if is_binary then "--bt --af-cc" else ""} \
         --bgen ${bgen} \
         --ref-first \
