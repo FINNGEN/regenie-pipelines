@@ -36,6 +36,7 @@ task step1 {
         --gz \
         --threads $n_cpu \
         --out ${prefix} \
+        --write-null-firth
         ${options}
 
         # rename loco files with phenotype names and update pred.list accordingly giving it a unique name
@@ -43,12 +44,19 @@ task step1 {
         phenohash=`echo ${sep="," phenolist} | md5sum | awk '{print $1}'`
         awk '{sub(/_[0-9]+.loco.gz/, "."$1".loco.gz", $2)} 1' ${prefix}_pred.list > ${prefix}.$phenohash.pred.list
 
+        # rename firth files with phenotype names and update firth.list accordingly giving it a unique name
+        awk '{orig=$2; sub(/_[0-9]+.firth.gz/, "."$1".firth.gz", $2); print "mv "orig" "$2} ' ${prefix}_firth.list | bash
+        phenohash=`echo ${sep="," phenolist} | md5sum | awk '{print $1}'`
+        awk '{sub(/_[0-9]+.firth.gz/, "."$1".firth.gz", $2)} 1' ${prefix}_firth.list > ${prefix}.$phenohash.firth.list
+
     >>>
 
     output {
         File log = prefix + ".log"
         Array[File] loco = glob("*.loco.gz")
         File pred = glob("*.pred.list")[0]
+        Array[File] nulls = glob("*.firth.gz")
+        File firth_list = glob("*.firth.list")[0]
     }
 
     runtime {
@@ -77,5 +85,7 @@ workflow regenie_step1 {
     output {
         File pred = step1.pred
         Array[File] loco = step1.loco
+        File firth_list = step1.firth_list
+        Array[File] nulls = step1.nulls
     }
 }

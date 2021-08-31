@@ -11,8 +11,10 @@ task step2 {
     File bgi = bgen + ".bgi"
     File sample = bgen + ".sample"
     File pred
+    File firth_list
     String prefix = sub(basename(pred), "_pred.list", "") + "." + basename(bgen)
     Array[File] loco
+    Array[File] nulls
     Int bsize
     String options
 
@@ -24,6 +26,11 @@ task step2 {
 
         # move loco files to /cromwell_root as pred file paths point there
         for file in ${sep=" " loco}; do
+            mv $file .
+        done
+
+        # move null files to /cromwell_root as firth_list file paths point there
+        for file in ${sep=" " nulls}; do
             mv $file .
         done
 
@@ -39,6 +46,7 @@ task step2 {
         --phenoFile ${cov_pheno} \
         --phenoColList ${sep="," phenolist} \
         --pred ${pred} \
+        --use-null-firth ${firth_list} \
         --bsize ${bsize} \
         --threads $n_cpu \
         --gz \
@@ -290,13 +298,15 @@ workflow regenie_step2 {
 
     String pred
     Array[String] loco
+    String firth_list
+    Array[String] nulls
 
     File bgenlist
     Array[String] bgens = read_lines(bgenlist)
 
     scatter (bgen in bgens) {
         call step2 {
-            input: docker=docker, phenolist=phenolist, is_binary=is_binary, cov_pheno=cov_pheno, covariates=covariates, pred=pred, loco=loco, bgen=bgen
+            input: docker=docker, phenolist=phenolist, is_binary=is_binary, cov_pheno=cov_pheno, covariates=covariates, pred=pred, loco=loco, nulls=nulls,firth_list=firth_list,bgen=bgen
         }
     }
 
