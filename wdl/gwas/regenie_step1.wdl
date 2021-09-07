@@ -63,7 +63,7 @@ task step1 {
 
         docker: "${docker}"
         cpu: if length(phenolist) == 1 then 1 else if length(phenolist) <=10 then 2 else 4
-        memory: if length(phenolist) == 1 then "6 GB" else "8 GB"
+        memory: if length(phenolist) == 1 then "8 GB" else "10 GB"
         disks: "local-disk 200 HDD"
         zones: "europe-west1-b europe-west1-c europe-west1-d"
         preemptible: 2
