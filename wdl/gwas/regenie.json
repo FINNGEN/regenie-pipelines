@@ -1,6 +1,6 @@
 {
-    "regenie.sub_step1.step1.docker": "eu.gcr.io/finngen-refinery-dev/regenie:v2.0.2.gz.afcc",
-    "regenie.sub_step2.docker": "eu.gcr.io/finngen-refinery-dev/regenie:v2.0.2.gz.afcc",
+    "regenie.sub_step1.step1.docker": "eu.gcr.io/finngen-refinery-dev/regenie:v2.2.4.fixed.gz.mkl",
+    "regenie.sub_step2.docker": "eu.gcr.io/finngen-refinery-dev/regenie:v2.2.4.fixed.gz.mkl",
 
     "regenie.phenolist": "gs://path/to/phenolist",
     "regenie.is_binary": true,

@@ -14,7 +14,7 @@ workflow regenie {
             input: phenolist=pheno_chunk, is_binary=is_binary, cov_pheno=cov_pheno, covariates=covariates
         }
         call sub.regenie_step2 as sub_step2 {
-            input: phenolist=pheno_chunk, is_binary=is_binary, cov_pheno=cov_pheno, covariates=covariates, pred=sub_step1.pred, loco=sub_step1.loco
+            input: phenolist=pheno_chunk, is_binary=is_binary, cov_pheno=cov_pheno, covariates=covariates, pred=sub_step1.pred, loco=sub_step1.loco, nulls=sub_step1.nulls, firth_list=sub_step1.firth_list
         }
     }
 }
