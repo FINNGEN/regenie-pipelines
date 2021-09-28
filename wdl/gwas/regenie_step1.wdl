@@ -49,6 +49,14 @@ task step1 {
         phenohash=`echo ${sep="," phenolist} | md5sum | awk '{print $1}'`
         awk '{sub(/_[0-9]+.firth.gz/, "."$1".firth.gz", $2)} 1' ${prefix}_firth.list > ${prefix}.$phenohash.firth.list
 
+        #check that firth nulls were created
+        loco_n=$(wc -l ${prefix}.$phenohash.pred.list|cut -d " " -f 1)
+        firth_n=$(wc -l ${prefix}.$phenohash.firth.list|cut -d " " -f 1)
+        #check if there is a firth approx per every null 
+        if [ "$loco_n" -ne "$firth_n" ]; then
+            echo "fitting firth null approximations FAILED. This job will abort."
+            exit 1
+        fi
     >>>
 
     output {
