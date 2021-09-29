@@ -36,7 +36,7 @@ task step1 {
         --gz \
         --threads $n_cpu \
         --out ${prefix} \
-        --write-null-firth
+        --write-null-firth \
         ${options}
 
         # rename loco files with phenotype names and update pred.list accordingly giving it a unique name
