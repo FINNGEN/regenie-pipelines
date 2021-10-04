@@ -36,26 +36,31 @@ task step1 {
         --gz \
         --threads $n_cpu \
         --out ${prefix} \
-        --write-null-firth \
+        ${if is_binary then "--write-null-firth" else ""} \
         ${options}
 
         # rename loco files with phenotype names and update pred.list accordingly giving it a unique name
         awk '{orig=$2; sub(/_[0-9]+.loco.gz/, "."$1".loco.gz", $2); print "mv "orig" "$2} ' ${prefix}_pred.list | bash
         phenohash=`echo ${sep="," phenolist} | md5sum | awk '{print $1}'`
         awk '{sub(/_[0-9]+.loco.gz/, "."$1".loco.gz", $2)} 1' ${prefix}_pred.list > ${prefix}.$phenohash.pred.list
-
-        # rename firth files with phenotype names and update firth.list accordingly giving it a unique name
-        awk '{orig=$2; sub(/_[0-9]+.firth.gz/, "."$1".firth.gz", $2); print "mv "orig" "$2} ' ${prefix}_firth.list | bash
-        phenohash=`echo ${sep="," phenolist} | md5sum | awk '{print $1}'`
-        awk '{sub(/_[0-9]+.firth.gz/, "."$1".firth.gz", $2)} 1' ${prefix}_firth.list > ${prefix}.$phenohash.firth.list
-
-        #check that firth nulls were created
         loco_n=$(wc -l ${prefix}.$phenohash.pred.list|cut -d " " -f 1)
-        firth_n=$(wc -l ${prefix}.$phenohash.firth.list|cut -d " " -f 1)
-        #check if there is a firth approx per every null 
-        if [ "$loco_n" -ne "$firth_n" ]; then
-            echo "fitting firth null approximations FAILED. This job will abort."
-            exit 1
+
+        if [[ "${is_binary}" == "true" ]]
+        then
+            # rename firth files with phenotype names and update firth.list accordingly giving it a unique name
+            awk '{orig=$2; sub(/_[0-9]+.firth.gz/, "."$1".firth.gz", $2); print "mv "orig" "$2} ' ${prefix}_firth.list | bash
+            phenohash=`echo ${sep="," phenolist} | md5sum | awk '{print $1}'`
+            awk '{sub(/_[0-9]+.firth.gz/, "."$1".firth.gz", $2)} 1' ${prefix}_firth.list > ${prefix}.$phenohash.firth.list
+
+            #check that firth nulls were created
+            firth_n=$(wc -l ${prefix}.$phenohash.firth.list|cut -d " " -f 1)
+            #check if there is a firth approx per every null
+            if [ "$loco_n" -ne "$firth_n" ]; then
+                echo "fitting firth null approximations FAILED. This job will abort."
+                exit 1
+            fi
+        else
+            touch ${prefix}.$phenohash.firth.list
         fi
     >>>
 

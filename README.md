@@ -51,7 +51,7 @@ This in an example scenario creating new phenotypes with R7 data and running tho
 9. Logs and results go under  
 `gs://fg-cromwell_fresh/regenie/WORKFLOW_ID`  
 Summary stats and tabix indexes:  
-`gs://fg-cromwell_fresh/regenie/WORKFLOW_ID/call-sub_step2/**/call-summary/**/*.gz*`  
+`gs://fg-cromwell_fresh/regenie/WORKFLOW_ID/call-sub_step2/**/call-gather/**/*.gz*`
 Plots:  
 `gs://fg-cromwell_fresh/regenie/WORKFLOW_ID/call-sub_step2/**/*.png`  
 Summary files with p < 1e-6 variants including annotation:  
