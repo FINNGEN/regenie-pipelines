@@ -11,7 +11,7 @@ task step2 {
     File bgi = bgen + ".bgi"
     File sample = bgen + ".sample"
     File pred
-    File? firth_list
+    File firth_list
     String prefix = sub(basename(pred), "_pred.list", "") + "." + basename(bgen)
     Array[File] loco
     Array[File] nulls
