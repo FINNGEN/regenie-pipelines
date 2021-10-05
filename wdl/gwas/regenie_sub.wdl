@@ -46,7 +46,7 @@ task step2 {
         --phenoFile ${cov_pheno} \
         --phenoColList ${sep="," phenolist} \
         --pred ${pred} \
-        --use-null-firth ${firth_list} \
+        ${if is_binary then "--use-null-firth ${firth_list}" else ""} \
         --bsize ${bsize} \
         --threads $n_cpu \
         --gz \
