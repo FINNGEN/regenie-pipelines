@@ -10,10 +10,7 @@ task coding_gather {
 
     command <<<
 
-    <(head -1) ${files_flat[0]} \
-        <(for file in ${sep=" " files_flat}; do
-            tail -n+2 $file
-        done | bgzip > coding_variants.txt.gz
+    cat <(head -n1 ${files_flat[0]}) <(awk 'FNR>1' ${sep=" " files_flat}) | bgzip > coding_variants.txt.gz
 
     >>>
 
