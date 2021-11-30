@@ -153,7 +153,8 @@ task summary{
     File finngen_tbi = finngen_annotation + ".tbi"
     File gnomad_tbi = gnomad_annotation + ".tbi"
 
-    Float pval_thresh
+    Float summary_pval_thresh
+    Float coding_pval_thresh
     String docker
 
     command <<<
@@ -163,7 +164,8 @@ task summary{
         fname = "${input_file}"
         finngen_annotation_file = "${finngen_annotation}"
         gnomad_annotation_file  = "${gnomad_annotation}"
-        sig_threshold = ${pval_thresh}
+        summary_threshold = ${summary_pval_thresh}
+        coding_threshold = ${coding_pval_thresh}
 
         import pysam
         import gzip
@@ -266,7 +268,7 @@ task summary{
                 for line in file:
                     line_columns = line.strip("\n").split('\t')
                     pvalue = float(line_columns[pval_idx])
-                    if pvalue < sig_threshold:
+                    if pvalue < coding_threshold:
                         cpra= (line_columns[cid],int(float(line_columns[pid])),line_columns[rid],line_columns[aid])
                         variant = "{}:{}:{}:{}".format(cpra[0],cpra[1],cpra[2],cpra[3])
                         fg_c = cpra[0].replace("chr","").replace("X","23").replace("Y","24").replace("M","25").replace("MT","25")
@@ -288,7 +290,8 @@ task summary{
                         ])
                         #gather row
                         #write to file
-                        summary_outfile.write("\t".join(line_columns)+"\n")
+                        if pvalue < summary_threshold:
+                            summary_outfile.write("\t".join(line_columns)+"\n")
 
                         #coding out
                         if fg_a.consequence in coding_groups:
