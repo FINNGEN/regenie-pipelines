@@ -21,7 +21,8 @@
     "regenie.sub_step2.summary.docker": "eu.gcr.io/finngen-refinery-dev/saige:0.39.1-fg-pysam",
     "regenie.sub_step2.summary.finngen_annotation": "gs://r7_data/annotations/R7_annotated_variants_v0.gz",
     "regenie.sub_step2.summary.gnomad_annotation": "gs://r4_data_west1/gnomad_functional_variants/fin_enriched_genomes_select_columns.txt.gz",
-    "regenie.sub_step2.summary.pval_thresh": 1e-6,
+    "regenie.sub_step2.summary.summary_pval_thresh": 1e-6,
+    "regenie.sub_step2.summary.coding_pval_thresh": 1e-4,
 
     "regenie.coding_gather.docker": "eu.gcr.io/finngen-refinery-dev/bioinformatics:0.7"
 }
