@@ -170,9 +170,25 @@ task summary{
         import os
         from typing import NamedTuple
 
-        output_name = os.path.splitext(os.path.basename(fname))[0] + "_summary.txt"
+        coding_groups = set([
+            "transcript_ablation",
+            "splice_donor_variant",
+            "stop_gained",
+            "splice_acceptor_variant",
+            "frameshift_variant",
+            "stop_lost",
+            "start_lost",
+            "inframe_insertion",
+            "inframe_deletion",
+            "missense_variant",
+            "protein_altering_variant"
+        ])
+
+        pheno = os.path.splitext(os.path.basename(fname))[0]
+        output_summary_name = pheno + "_summary.txt"
+        output_coding_name = pheno + "_coding.txt"
         FGAnnotation = NamedTuple('FGAnnotation',[('gene',str),('consequence',str)])
-        GnomadAnnotation = NamedTuple('GnomadAnnotation',[('finaf',str),('nfeaf',str),('rsid',str)])
+        GnomadAnnotation = NamedTuple('GnomadAnnotation',[('finaf',str),('nfeaf',str),('enrich',str),('rsid',str)])
 
         def get_header(reader,file):
             with reader(file, "rt") as f:
@@ -186,13 +202,13 @@ task summary{
                     return FGAnnotation(cols[gene_idx],cols[consequence_idx])
             return FGAnnotation("","")
 
-        def get_gnomad_annotation(iterator,cpra,finaf_idx, nfeaf_idx, rsid_id,gnomad_cpra) -> GnomadAnnotation:
+        def get_gnomad_annotation(iterator,cpra,finaf_idx, nfeaf_idx, rsid_idx,gd_cpra) -> GnomadAnnotation:
             for v in iterator:
                 cols = v.strip("\n").split("\t")
 
                 if (cols[gd_cpra[0]] == "chr"+cpra[0]) and (cols[gd_cpra[1]] == str(cpra[1])) and (cols[gd_cpra[2]] == cpra[2]) and (cols[gd_cpra[3]] == cpra[3]):
-                    return GnomadAnnotation(cols[finaf_idx],cols[nfeaf_idx],cols[rsid_idx])
-            return GnomadAnnotation(".",".",".")
+                    return GnomadAnnotation(cols[finaf_idx],cols[nfeaf_idx],cols[enrich_idx],cols[rsid_idx])
+            return GnomadAnnotation(".",".",".",".")
 
         #required columns
         fg_req_cols=["#variant","gene_most_severe","most_severe"]
@@ -220,13 +236,13 @@ task summary{
             raise Exception("Not all columns present in Gnomad annotation! Aborting...")
         var_idx, gene_idx, cons_idx = (fg_idx["#variant"],fg_idx["gene_most_severe"],fg_idx["most_severe"])
 
-        finaf_idx, nfeaf_idx, rsid_idx = (gd_idx["fin.AF"],gd_idx["nfsee.AF"],gd_idx["rsid"])
+        finaf_idx, nfeaf_idx, enrich_idx, rsid_idx = (gd_idx["fin.AF"],gd_idx["nfsee.AF"],gd_idx["enrichment_nfsee"],gd_idx["rsid"])
 
 
 
         with gzip.open(fname, "rt") as file:
             #open output file
-            with open(output_name,"w") as outfile:
+            with open(output_summary_name,"w") as summary_outfile, open(output_coding_name,"w") as coding_outfile:
                 #read header
                 header = file.readline().strip("\n").split('\t')
                 #find p-value index
@@ -241,7 +257,11 @@ task summary{
 
                 #add gene name, consequence, gnomad finnish af, nfsee af, rsid
                 header.extend(["fin.AF","nfsee.AF","rsid","gene_most_severe","most_severe"])
-                outfile.write("\t".join(header)+"\n")
+                summary_outfile.write("\t".join(header)+"\n")
+                #add pheno, fin enrichment
+                header.extend(["fin.enrichment","phenotype"])
+                coding_outfile.write("\t".join(header)+"\n")
+                
                 #read lines
                 for line in file:
                     line_columns = line.strip("\n").split('\t')
@@ -268,14 +288,23 @@ task summary{
                         ])
                         #gather row
                         #write to file
-                        outfile.write("\t".join(line_columns)+"\n")
+                        summary_outfile.write("\t".join(line_columns)+"\n")
+
+                        #coding out
+                        if fg_a.consequence in coding_groups:
+                            line_columns.extend([
+                                gd_a.enrich,
+                                pheno
+                            ])
+                            coding_outfile.write("\t".join(line_columns)+"\n")
         print("summary created")
         EOF
 
     >>>
 
     output {
-        File out = glob("*_summary.txt")[0]
+        File summary_out = glob("*_summary.txt")[0]
+        File coding_out = glob("*_coding.txt")[0]
     }
 
     runtime {
@@ -327,6 +356,7 @@ workflow regenie_step2 {
         Array[File] qq_err = gather.qq_err
         Array[Array[File]] pngs = gather.pngs
         Array[Array[File]] quantiles = gather.quantiles
-        Array[File] summary = summary.out
+        Array[File] summary = summary.summary_out
+        Array[File] coding = summary.coding_out
     }
 }
