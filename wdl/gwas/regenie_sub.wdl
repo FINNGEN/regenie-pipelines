@@ -268,7 +268,7 @@ task summary{
                 for line in file:
                     line_columns = line.strip("\n").split('\t')
                     pvalue = float(line_columns[pval_idx])
-                    if pvalue < coding_threshold:
+                    if pvalue < coding_threshold or pvalue < summary_threshold:
                         cpra= (line_columns[cid],int(float(line_columns[pid])),line_columns[rid],line_columns[aid])
                         variant = "{}:{}:{}:{}".format(cpra[0],cpra[1],cpra[2],cpra[3])
                         fg_c = cpra[0].replace("chr","").replace("X","23").replace("Y","24").replace("M","25").replace("MT","25")
@@ -294,7 +294,7 @@ task summary{
                             summary_outfile.write("\t".join(line_columns)+"\n")
 
                         #coding out
-                        if fg_a.consequence in coding_groups:
+                        if pvalue < coding_threshold and fg_a.consequence in coding_groups:
                             line_columns.extend([
                                 gd_a.enrich,
                                 pheno
