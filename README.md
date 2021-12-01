@@ -3,7 +3,27 @@ WDL pipelines for running regenie
 
 See regenie [documentation](https://rgcgithub.github.io/regenie/options/) and [paper](https://www.biorxiv.org/content/10.1101/2020.06.19.162354v2.full.pdf)
 
-We've added case/control AF calculation and output to regenie, see [repo](https://github.com/FINNGEN/regenie)
+## Building docker image
+
+The current version of regenie has the modifications created in the finngen repo, so it can be used to build the docker image. We want to build with Boost iostream for compression support, and with intel MKL as the linear algebra package.
+1. clone the repository and either use the latest commit or check the fixed 2.2.4 commit (c1daf24)
+```bash
+git clone git@github.com:rgcgithub/regenie.git
+cd regenie
+#optional
+git checkout c1daf24
+```
+2. issue make command in regenie folder
+```bash
+make docker-build MKLROOT=1 STATIC=1 HAS_BOOST_IOSTREAM=1
+```
+3. retag image and push to (eu) repository
+```bash
+TAG=YOUR_TAG
+IMG_NAME=IMAGE_NAME
+docker tag $IMG_NAME eu.gcr.io/finngen-refinery-dev/regenie:$TAG
+docker push eu.gcr.io/finngen-refinery-dev/regenie:$TAG
+```
 
 ## Running GWAS
 
