@@ -18,11 +18,11 @@
 
     "regenie.sub_step2.gather.docker": "eu.gcr.io/finngen-refinery-dev/saige:0.39.1-fg",
 
-    "regenie.sub_step2.summary.docker": "eu.gcr.io/finngen-refinery-dev/saige:0.39.1-fg-pysam",
-    "regenie.sub_step2.summary.finngen_annotation": "gs://r8_data/annotations/R8_sisuv4_annotated_variants_v1.gz",
-    "regenie.sub_step2.summary.gnomad_annotation": "gs://r4_data_west1/gnomad_functional_variants/fin_enriched_genomes_select_columns.txt.gz",
-    "regenie.sub_step2.summary.summary_pval_thresh": 1e-6,
-    "regenie.sub_step2.summary.coding_pval_thresh": 1e-4,
+    "regenie.post_summary.summary.docker": "eu.gcr.io/finngen-refinery-dev/saige:0.39.1-fg-pysam",
+    "regenie.post_summary.summary.finngen_annotation": "gs://r8_data/annotations/R8_sisuv4_annotated_variants_v1.gz",
+    "regenie.post_summary.summary.gnomad_annotation": "gs://r4_data_west1/gnomad_functional_variants/fin_enriched_genomes_select_columns.txt.gz",
+    "regenie.post_summary.summary.summary_pval_thresh": 1e-6,
+    "regenie.post_summary.summary.coding_pval_thresh": 1e-4,
 
-    "regenie.coding_gather.docker": "eu.gcr.io/finngen-refinery-dev/bioinformatics:0.7"
+    "regenie.post_summary.gather.docker": "eu.gcr.io/finngen-refinery-dev/bioinformatics:0.7"
 }
