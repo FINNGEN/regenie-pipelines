@@ -12,7 +12,7 @@ task step1 {
     String options
 
     String docker
-    Int cov_filter_th = 10
+    Int covariate_inclusion_threshold
     command <<<
 
         set -euxo pipefail
@@ -22,7 +22,7 @@ task step1 {
         COVARFILE=${cov_pheno}
         PHENO="${phenolist sep=','}"
         COVARS="${covariates}"
-        THRESHOLD=${cov_filter_th}
+        THRESHOLD=${covariate_inclusion_threshold}
         # Filter binary covariates that don't have enough covariate values in them
         # Inputs: covariate file, comma-separated phenolist, comma-separated covariate list, threshold for excluding a covariate
         # If a covariate is quantitative (=having values different from 0,1,NA), it is masked and will be passed through.
