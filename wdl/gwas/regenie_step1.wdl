@@ -75,6 +75,7 @@ task step1 {
                     printf("%s%s" ,SEP,covars[co])
                     SEP=","
                 }
+                printf "Covariate %s zero count: %d one count: %d mask: %d\n",covars[co],zerovals[covars[co]],onevals[covars[co]],mask[covars[co]] >> "/dev/stderr"; 
             }
         }'
 
