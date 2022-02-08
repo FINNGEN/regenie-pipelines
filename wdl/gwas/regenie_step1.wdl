@@ -12,13 +12,75 @@ task step1 {
     String options
 
     String docker
-
+    Int covariate_inclusion_threshold
     command <<<
 
         set -euxo pipefail
 
-        n_cpu=`grep -c ^processor /proc/cpuinfo`
 
+        #filter degenerate covariates, e.g. sex imputed from sex-specific phenotypes
+        COVARFILE=${cov_pheno}
+        PHENO="${phenolist sep=','}"
+        COVARS="${covariates}"
+        THRESHOLD=${covariate_inclusion_threshold}
+        # Filter binary covariates that don't have enough covariate values in them
+        # Inputs: covariate file, comma-separated phenolist, comma-separated covariate list, threshold for excluding a covariate
+        # If a covariate is quantitative (=having values different from 0,1,NA), it is masked and will be passed through.
+        # If a binary covariate has value NA, it will not be counted towards 0 or 1 for that covariate.
+        # If a covariate does not seem to exist (e.g. PC{1:10}), it will be passed through.
+        # If any of the phenotypes is not NA on that row, that row will be counted. This is in line with the step1 mean-imputation for multiple phenotypes.
+        zcat $COVARFILE |awk -v covariates=$COVARS  -v phenos=$PHENO -v th=$THRESHOLD > new_covars  '
+        BEGIN{FS="\t"}
+        NR == 1 {
+            covlen = split(covariates,covars,",")
+            phlen = split(phenos,phenoarr,",")
+            for (i=1; i<=NF; i++){
+                h[$i] = i
+                mask[$i] = 0
+            }
+        }
+        NR > 1 {
+            #if any of the phenotypes is not NA, then take the row into account
+            process_row=0
+            for (ph in phenoarr){
+                if ($h[phenoarr[ph]] != "NA"){
+                    process_row = 1
+                }
+            }
+            if (process_row == 1){
+                for (co in covars){
+                    if($h[covars[co]] == 0) {
+                        zerovals[covars[co]] +=1
+                    }
+                    else if($h[covars[co]] == 1) {
+                        onevals[covars[co]] +=1
+                    }
+                    else if($h[covars[co]] == "NA"){
+                        #no-op
+                        na=0;
+                    }
+                    else {
+                        #mask this covariate to be included, no matter the counts
+                        #includes both covariate not found in header and quantitative covars
+                        mask[covars[co]] =1
+                    }
+                }
+            }
+
+        }
+        END{
+            SEP=""
+            for (co in covars){
+                if( ( zerovals[covars[co]] > th && onevals[covars[co]] > th ) || mask[covars[co]] == 1 ){
+                    printf("%s%s" ,SEP,covars[co])
+                    SEP=","
+                }
+                printf "Covariate %s zero count: %d one count: %d mask: %d\n",covars[co],zerovals[covars[co]],onevals[covars[co]],mask[covars[co]] >> "/dev/stderr"; 
+            }
+        }'
+
+        n_cpu=`grep -c ^processor /proc/cpuinfo`
+        NEWCOVARS=$(cat new_covars)
         # fid needs to be the same as iid in fam
         awk '{$1=$2} 1' ${grm_fam} > tempfam && mv tempfam ${grm_fam}
 
@@ -27,7 +89,7 @@ task step1 {
         ${if is_binary then "--bt" else ""} \
         --bed ${sub(grm_bed, "\\.bed$", "")} \
         --covarFile ${cov_pheno} \
-        --covarColList ${covariates} \
+        --covarColList $NEWCOVARS \
         --phenoFile ${cov_pheno} \
         --phenoColList ${sep="," phenolist} \
         --bsize ${bsize} \
@@ -70,6 +132,7 @@ task step1 {
         File pred = glob("*.pred.list")[0]
         Array[File] nulls = glob("*.firth.gz")
         File firth_list = glob("*.firth.list")[0]
+        String used_covariates = read_string("new_covars")
     }
 
     runtime {
@@ -100,5 +163,6 @@ workflow regenie_step1 {
         Array[File] loco = step1.loco
         File firth_list = step1.firth_list
         Array[File] nulls = step1.nulls
+        String new_covariates = step1.new_covars
     }
 }
