@@ -12,12 +12,56 @@ task step1 {
     String options
 
     String docker
+    Boolean auto_remove_sex_covar
+    String sex_col_name
 
     command <<<
 
-        set -euxo pipefail
+  #      set -euxo pipefail
 
         n_cpu=`grep -c ^processor /proc/cpuinfo`
+        is_single_sex=$(zcat ${cov_pheno} | awk -v sexcol=${sex_col_name} -v phenocols=${sep="," phenolist} \
+        ' BEGIN{ is_single=1}
+          NR==1{
+            for(i=1;i<=NF;i++) {h[$i]=i;};
+            split(phenocols,ps, ",");
+            prev="";
+            is_single=1;
+            for(pi in ps) {
+              if(!(ps[pi] in h)) {
+                 print "Given phenotype " ps[pi] " does not exist in phenofile" > "/dev/stderr"; exit 1;
+              }
+            }
+            if(!(sexcol in h)) {
+              print "Given sexcolumn:"sexcol" does not exist in phenofile" > "/dev/stderr"; exit 1;
+            }
+          }
+          NR>1{
+            for(pi in ps) {
+             if ($h[ps[pi]]!="NA") {
+               if(prev!=""&&prev!=$h[sexcol]) {is_single=0; exit;};
+               prev=$h[sexcol];
+             }
+            }
+         }
+         END { print "is single ", is_single > "/dev/stderr"; printf is_single }'
+        )
+
+      if [[ $is_single_sex -eq 1 ]]
+      then
+        echo "true" > is_single_sex
+      else
+        echo "false" > is_single_sex
+      fi
+
+       if [[ "${auto_remove_sex_covar}" == "true" && "$is_single_sex" == "1" ]];
+       then
+          covars=$(echo ${covariates} | sed -e 's/${sex_col_name}//' | sed 's/^,//' | sed -e 's/,$//' | sed 's/,,/,/g')
+       else
+          covars=${covariates}
+       fi
+
+       echo $covars > covars_used
 
         # fid needs to be the same as iid in fam
         awk '{$1=$2} 1' ${grm_fam} > tempfam && mv tempfam ${grm_fam}
@@ -27,7 +71,7 @@ task step1 {
         ${if is_binary then "--bt" else ""} \
         --bed ${sub(grm_bed, "\\.bed$", "")} \
         --covarFile ${cov_pheno} \
-        --covarColList ${covariates} \
+        --covarColList $covars \
         --phenoFile ${cov_pheno} \
         --phenoColList ${sep="," phenolist} \
         --bsize ${bsize} \
@@ -70,6 +114,9 @@ task step1 {
         File pred = glob("*.pred.list")[0]
         Array[File] nulls = glob("*.firth.gz")
         File firth_list = glob("*.firth.list")[0]
+        String covars_used = read_string("covars_used")
+        File covariatelist = "covars_used"
+        Boolean  is_single_sex = read_boolean("is_single_sex")
     }
 
     runtime {
@@ -90,9 +137,13 @@ workflow regenie_step1 {
     Boolean is_binary
     String cov_pheno
     String covariates
+    String docker
+    Boolean auto_remove_sex_covar
+    String sex_col_name
 
     call step1 {
-        input: phenolist=phenolist, is_binary=is_binary, cov_pheno=cov_pheno, covariates=covariates
+        input: phenolist=phenolist, is_binary=is_binary, cov_pheno=cov_pheno, covariates=covariates,
+        auto_remove_sex_covar=auto_remove_sex_covar, docker=docker, sex_col_name=sex_col_name
     }
 
     output {
@@ -100,5 +151,7 @@ workflow regenie_step1 {
         Array[File] loco = step1.loco
         File firth_list = step1.firth_list
         Array[File] nulls = step1.nulls
+        String covars_used = step1.covars_used
+        Boolean is_single_sex = step1.is_single_sex
     }
 }

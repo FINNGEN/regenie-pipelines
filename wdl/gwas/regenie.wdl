@@ -36,17 +36,24 @@ workflow regenie {
     Boolean is_binary
     String cov_pheno
     String covariates
+    String docker
+
+    Boolean auto_remove_sex_covar
+    String sex_col_name
 
     scatter (pheno_chunk in pheno_chunks) {
         call step1.regenie_step1 as sub_step1 {
-            input: phenolist=pheno_chunk, is_binary=is_binary, cov_pheno=cov_pheno, covariates=covariates
+            input: phenolist=pheno_chunk, is_binary=is_binary, cov_pheno=cov_pheno, covariates=covariates,
+            auto_remove_sex_covar=auto_remove_sex_covar,sex_col_name=sex_col_name, docker=docker
         }
         call sub.regenie_step2 as sub_step2 {
-            input: phenolist=pheno_chunk, is_binary=is_binary, cov_pheno=cov_pheno, covariates=covariates, pred=sub_step1.pred, loco=sub_step1.loco, nulls=sub_step1.nulls, firth_list=sub_step1.firth_list
+            input: phenolist=pheno_chunk, is_binary=is_binary, cov_pheno=cov_pheno, covariates=sub_step1.covars_used,
+            pred=sub_step1.pred, loco=sub_step1.loco, nulls=sub_step1.nulls, firth_list=sub_step1.firth_list, docker=docker,
+            sex_col_name=sex_col_name, is_single_sex=sub_step1.is_single_sex
         }
     }
 
     call coding_gather {
-        input: files=sub_step2.coding
+        input: files=sub_step2.coding, docker=docker
     }
 }
