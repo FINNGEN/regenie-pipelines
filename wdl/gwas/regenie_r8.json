@@ -10,6 +10,7 @@
     "regenie.sub_step1.step1.grm_bed": "gs://r8_data/grm/sisuv4/R8_sisuv4_GRM_V0_LD_0.1.bed",
     "regenie.sub_step1.step1.bsize": 1000,
     "regenie.sub_step1.step1.options": "",
+    "regenie.sub_step1.step1.covariate_inclusion_threshold": 10,
 
     "regenie.sub_step2.bgenlist": "gs://r8_data/bgen/sisuv4/R8_bgen.txt",
     "regenie.sub_step2.step2.test": "additive",
