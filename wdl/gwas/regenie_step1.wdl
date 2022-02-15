@@ -121,8 +121,9 @@ task step1 {
                 echo "fitting firth null approximations FAILED. This job will abort."
                 exit 1
             fi
-        else
+        else # touch files to have quant phenos not fail output globbing
             touch ${prefix}.$phenohash.firth.list
+            touch get_globbed.firth.gz
         fi
     >>>
 
