@@ -66,8 +66,7 @@ task step1 {
 
         #filter out covariates with too few observations
         COVARFILE=${cov_pheno}
-        PHENO="${phenolist sep=','}"
-
+        PHENO="${sep=',' phenolist}"
         THRESHOLD=${covariate_inclusion_threshold}
         # Filter binary covariates that don't have enough covariate values in them
         # Inputs: covariate file, comma-separated phenolist, comma-separated covariate list, threshold for excluding a covariate
