@@ -6,24 +6,11 @@ See regenie [documentation](https://rgcgithub.github.io/regenie/options/) and [p
 ## Building docker image
 
 The current version of regenie has the modifications created in the finngen repo, so it can be used to build the docker image. We want to build with Boost iostream for compression support, and with intel MKL as the linear algebra package.
-1. clone the repository and either use the latest commit or check the fixed 2.2.4 commit (c1daf24)
-```bash
-git clone git@github.com:rgcgithub/regenie.git
-cd regenie
-#optional
-git checkout c1daf24
-```
-2. issue make command in regenie folder
-```bash
-make docker-build MKLROOT=1 STATIC=1 HAS_BOOST_IOSTREAM=1
-```
-3. retag image and push to (eu) repository
-```bash
-TAG=YOUR_TAG
-IMG_NAME=IMAGE_NAME
-docker tag $IMG_NAME eu.gcr.io/finngen-refinery-dev/regenie:$TAG
-docker push eu.gcr.io/finngen-refinery-dev/regenie:$TAG
-```
+
+Build image with [build_docker.sh](scripts/build_docker.sh). Give tag with version (e.g. FG_1.1) as parameter.
+Check the beginning of scripts for modifying the default behavior with few variables (e.g. not building base regenie but basing off of already built one)
+The parameter is just name tag to be added to the base regenie docker name. Change versioning as needed.
+
 
 ## Running GWAS
 
@@ -53,6 +40,13 @@ This in an example scenario creating new phenotypes with R7 data and running tho
     5.3. `regenie.is_binary` should be `true` for binary phenotypes and `false` for quantitative phenotypes  
     5.4. `regenie.sub_step2.step2.test` can be `additive`, `recessive` or `dominant` depending on which analysis you want to run  
     5.5. Change `regenie.covariates` and `regenie.sub_step2.step2.options` as needed
+
+    5.6.
+    "regenie.auto_remove_sex_covar": true,
+    "regenie.sex_col_name": "SEX_IMPUTED",
+    "regenie.sub_step2.run_sex_specific": true,
+    "regenie.sub_step2.step2.sex_specific_logpval": 6,
+
 5. Cromwell requires subworkflows be zipped: `cd regenie-pipelines/wdl/gwas/ && zip regenie_sub regenie_step1.wdl regenie_sub.wdl`
 6. Connect to Cromwell server  
     `gcloud compute ssh cromwell-fg-1 --project finngen-refinery-dev --zone europe-west1-b -- -fN -L localhost:5000:localhost:80`
