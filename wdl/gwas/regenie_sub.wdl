@@ -302,7 +302,7 @@ task gather {
     }
 
     runtime {
-        docker: "eu.gcr.io/finngen-refinery-dev/regenie:2.2.4_G_0.1.2"
+        docker: "${docker}"
         cpu: 1
         memory: "8 GB"
         disks: "local-disk 200 HDD"
