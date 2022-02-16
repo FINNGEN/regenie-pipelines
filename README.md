@@ -7,7 +7,7 @@ See regenie [documentation](https://rgcgithub.github.io/regenie/options/) and [p
 
 The current version of regenie has the modifications created in the finngen repo, so it can be used to build the docker image. We want to build with Boost iostream for compression support, and with intel MKL as the linear algebra package.
 
-Build image with `scripts/build_docker.sh FG_0.1.1`.
+Build image with [build_docker.sh](scripts/build_docker.sh). Give tag with version (e.g. FG_1.1) as parameter.
 Check the beginning of scripts for modifying the default behavior with few variables (e.g. not building base regenie but basing off of already built one)
 The parameter is just name tag to be added to the base regenie docker name. Change versioning as needed.
 
