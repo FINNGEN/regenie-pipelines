@@ -28,7 +28,18 @@ task step2 {
     String DOLLAR="$"
 
     command <<<
-      ## continue statement exits with 1.... switch to if statement below in case want to pipefail back
+        echo '''BEGIN{print_males ="males";print_females="females";males[0]=0;males[1]=0;females[0]=0;females[1]=0}
+NR==1{ for(i=1;i<=NF;i++) {h[$i]=i}}
+NR>1{
+if($h[sexcol]==0 && $h[phenocol]!="NA"){males[$h[phenocol]] += 1 }
+if($h[sexcol]==1 && $h[phenocol]!="NA"){females[$h[phenocol]] += 1}}
+END{
+if(males[0]<10 ||males[1]<10){print_males = "";print "Skipping male sex-specific analysis: phenotype",phenocol,"had only",males[0] ",", males[1], "male controls/cases." > "/dev/stderr"}
+if(females[0]<10 ||females[1]<10){print_females = "";print "Skipping female sex-specific analysis: phenotype",phenocol,"had only",females[0] ",", females[1], "female controls/cases." > "/dev/stderr"}
+print print_males,print_females
+}
+''' > filter_sex_spec_analysis.awk
+        ## continue statement exits with 1.... switch to if statement below in case want to pipefail back
         ##set -euxo pipefail
 
         n_cpu=`grep -c ^processor /proc/cpuinfo`
@@ -116,7 +127,12 @@ task step2 {
               continue
             fi
 
-            for s in males females;
+            # NOTE
+            # NOTE figure out whether we can run males and or females sex-specific analysis. In some endpoints, there are too little 
+            # NOTE cases (under 10) per sex, which errors out the script.
+            sex_analyses=$(zcat ${cov_pheno} | awk -v phenocol=$p -v sexcol=${sex_col_name} -f filter_sex_spec_analysis.awk)
+
+            for s in $sex_analyses;
             do
               echo "running $s analysis"
               echo "$(wc -l $s) individuals in file"
