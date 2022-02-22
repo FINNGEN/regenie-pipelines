@@ -131,11 +131,12 @@ END{
 if(males[0]<10 ||males[1]<10){
 print_males = ""
 print "Skipping male sex-specific analysis: phenotype",phenocol,"had only",males[0] ",", males[1], "male controls/cases." > "/dev/stderr"
-cmd = "cp mock_sex_spec.txt.gz " ${prefix}.sex_spec.males_" phenocol ".gz";system(cmd)}
+cmd = sprintf("cp mock_sex_spec.txt.gz ${prefix}.sex_spec.males_%s.gz", phenocol);system(cmd)
+}
 if(females[0]<10 ||females[1]<10){
 print_females = ""
 print "Skipping female sex-specific analysis: phenotype",phenocol,"had only",females[0] ",", females[1], "female controls/cases." > "/dev/stderr"
-cmd = "cp mock_sex_spec.txt.gz " ${prefix}.sex_spec.females_" phenocol ".gz";system(cmd)}
+cmd = sprintf("cp mock_sex_spec.txt.gz ${prefix}.sex_spec.females_%s.gz", phenocol);system(cmd)
 }
 print print_males,print_females
 }
