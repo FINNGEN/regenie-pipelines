@@ -1,5 +1,4 @@
 # regenie-pipelines
-#testimuutos
 WDL pipelines for running regenie
 
 See regenie [documentation](https://rgcgithub.github.io/regenie/options/) and [paper](https://www.biorxiv.org/content/10.1101/2020.06.19.162354v2.full.pdf)
