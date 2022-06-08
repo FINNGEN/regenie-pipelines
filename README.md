@@ -134,7 +134,7 @@ The outputs will be in the `--out` directory (generated if missing). Along with 
 
 ### WDL
 
-Here I will explain the tasks and inputs of the [wdl](wdl/regenie_conditional_full.wdl)
+Here I will explain the tasks and inputs of the [wdl](wdl/conditional-analysis/regenie_conditional_full.wdl)
 
 #### Inputs
 
@@ -208,7 +208,7 @@ This is the major task where the magic happens. For reference, the shards will t
 
 ### BGEN CONVERSION
 
-For regenie usage unfortunately, the standard release bgens do not work, as regenie expects chromosome names in the bgen to be without the `chr` prefix. For this reason there is a [wdl](wdl/bgen_convert.wdl) for it. 
+For regenie usage unfortunately, the standard release bgens do not work, as regenie expects chromosome names in the bgen to be without the `chr` prefix. For this reason there is a [wdl](wdl/conditional-analysis/bgen_convert.wdl) for it. 
 
 The task uses an annotation script from [another pipeline](https://github.com/FINNGEN/ConvertVCF/tree/bgen-chrom-annotation) edited for the purpose. Each chrom is split into smaller vcfs with an edited chr name. Then the chunks are converted to bgen and finally merged. The inputs of the json are:
 
