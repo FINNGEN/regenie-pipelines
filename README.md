@@ -158,13 +158,13 @@ Global inputs:
 "conditional_analysis.ref_col": "ref",
 "conditional_analysis.alt_col": "alt",
  ``` 
- `phenos_to cond` and `chroms` determine what phenos and what chrom regions are run. This can be handy to run shorter/test runs. 
- `pheno_file` is the file that contains all pheno related data. It has to have the FID column and contain the covariates.
- `release` is added as a suffix to all pipeline outputs
- `sumstats_root` is the standard regenie output of Finngen from which the top hits are chosen. The following list of header inputs (`mlogp_col`,`chr_col` etc) have to match the content of the sumstats files. 
+ `phenos_to cond` and `chroms` determine what phenos and what chrom regions are run. This can be handy to run shorter/test runs.   
+ `pheno_file` is the file that contains all pheno related data. It has to have the FID column and contain the covariates.  
+ `release` is added as a suffix to all pipeline outputs  
+ `sumstats_root` is the standard regenie output of Finngen from which the top hits are chosen. The following list of header inputs (`mlogp_col`,`chr_col` etc) have to match the content of the sumstats files.   
  
- `locus_mlogp_threshold` determines the threshold for choosing the starting locuses (extracted from sumstats).
- `conditioning_mlogp_threshold` instead is the parameter used to stop the regenie chain conditional run.
+ `locus_mlogp_threshold` determines the threshold for choosing the starting locuses (extracted from sumstats).  
+ `conditioning_mlogp_threshold` instead is the parameter used to stop the regenie chain conditional run.  
  
  ### filter_covariates
  This is a preprocessing task. It generates for each pheno the list of valid covariates to be passed to regenie. It checks that for each group of input phenos (in this case each pheno is its own group) there are at least N counts of non NA samples *and* non 0 covariates. The output of the task is a pheno--> covariates map object that is then passed to regenie later.
