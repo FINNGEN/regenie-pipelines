@@ -160,7 +160,7 @@ Global inputs:
  ``` 
  `phenos_to cond` and `chroms` determine what phenos and what chrom regions are run. This can be handy to run shorter/test runs.   
  `pheno_file` is the file that contains all pheno related data. It has to have the FID column and contain the covariates.  
- `release` is added as a suffix to all pipeline outputs  
+ `release` is added as a suffix to all pipeline outputs.    
  `sumstats_root` is the standard regenie output of Finngen from which the top hits are chosen. The following list of header inputs (`mlogp_col`,`chr_col` etc) have to match the content of the sumstats files.   
  
  `locus_mlogp_threshold` determines the threshold for choosing the starting locuses (extracted from sumstats).  
@@ -183,7 +183,7 @@ This task returns the top hits for each pheno, under the previously defined thre
 "conditional_analysis.extract_cond_regions.region_root": "gs://r9_data/finemap/release/regions/PHENO.bed",
 ```
 
-#3## merge_regions
+### merge_regions
 Pretty self explanatory task. All regions from the previous task are merged into a single input file over which we will scatter the regenie runs. 
 
 #### regenie_conditional
@@ -199,11 +199,11 @@ This is the major task where the magic happens. For reference, the shards will t
     "conditional_analysis.regenie_conditional.cpus": 4,
 
 ```
-`bgen_root` is the path to the bgens, where a `.bgen.sample` is expected to be found as well!
-`null_root` are the step1 outputs
-`beta` and `se_beta` are the column names for the entries in the sumstat file.
-`max_steps` controls the maximum length of the chain
-`regenie_params` are all the other flags to be passed to regenie
+`bgen_root` is the path to the bgens, where a `.bgen.sample` is expected to be found as well!  
+`null_root` are the step1 outputs.  
+`beta` and `se_beta` are the column names for the entries in the sumstat file.  
+`max_steps` controls the maximum length of the chain.  
+`regenie_params` are all the other flags to be passed to regenie.  
 `cpus` is self explanatory.
 
 ### BGEN CONVERSION
