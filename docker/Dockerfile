@@ -3,7 +3,6 @@ ARG base_image
 FROM $base_image
 
 ARG HTSLIB_VER=1.14
-
 COPY requirements.txt .
 COPY scripts/qqplot.R /usr/local/bin
 RUN chmod a+x /usr/local/bin/qqplot.R
@@ -29,3 +28,10 @@ COPY scripts/install.packages.R /usr/local/bin/
 
 RUN chmod a+x /usr/local/bin/install.packages.R && \
     install.packages.R
+
+
+RUN apt-get install moreutils  zip unzip -y
+RUN pip3 install --no-cache numpy scipy pandas cget
+
+RUN pip3 install csvkit
+ADD ./scripts ../scripts

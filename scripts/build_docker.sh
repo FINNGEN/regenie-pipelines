@@ -1,4 +1,10 @@
 #!/bin/bash
+
+
+#change directory to parent of this script so docker file can always be found without having to worry from which path you launch the script
+APP_ROOT="$(dirname "$(dirname "$(readlink -fm "$0")")")"
+cd $APP_ROOT
+
 git clone git@github.com:rgcgithub/regenie.git
 
 cd regenie
@@ -15,7 +21,7 @@ FINNGEN_TAG=$1
 
 ### if this is given then does not rebuild regenie docker but uses this as base docker for building finngen docker
 ## leave empty or undefined to build regenie first.
-BASE_REGENIE_DOCKER="eu.gcr.io/finngen-refinery-dev/regenie:v2.2.4.fixed.gz.mkl"
+#BASE_REGENIE_DOCKER="eu.gcr.io/finngen-refinery-dev/regenie:3.1.1_r9_base"
 
 TAG=$(cat VERSION)"_"$FINNGEN_TAG
 
@@ -30,9 +36,11 @@ fi
 
 cd ..
 
-echo "Building finngen regenie-pipeline docker based on $IMG_NAME and using htslib $HTSLIB_VER"
 
-docker build -f docker/Dockerfile -t $IMG_NAME --build-arg base_image=$IMG_NAME --build-arg HTSLIB_VER=$HTSLIB_VER .
+echo $PWD
+
+echo "Building finngen regenie-pipeline docker based on $IMG_NAME and using htslib $HTSLIB_VER"
+docker build -f docker/Dockerfile -t $IMG_NAME --build-arg base_image=$IMG_NAME --build-arg HTSLIB_VER=$HTSLIB_VER  .
 
 echo "Pushing to docker repo eu.gcr.io/finngen-refinery-dev/regenie:$TAG"
 docker tag $IMG_NAME eu.gcr.io/finngen-refinery-dev/regenie:$TAG
