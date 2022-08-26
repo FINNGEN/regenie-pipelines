@@ -65,6 +65,8 @@ task pheweb_import_munge{
     String docker
     Array[File] regenie_outputs
   }
+
+  Int disk_size = ceil(size(cond_locus_hits,'GB')) + ceil(size(regenie_outputs,'GB')) + 10
   
   String out_file = "finngen_R" + release + "_sql.merged.txt"
   command <<<
@@ -138,7 +140,7 @@ task pheweb_import_munge{
     cpu: "4"
     docker: "${docker}"
     memory: "4 GB"
-    disks: "local-disk 10 HDD"
+    disks: "local-disk ${disk_size} HDD"
     zones: "europe-west1-b europe-west1-c europe-west1-d"
     preemptible: "1"
       
