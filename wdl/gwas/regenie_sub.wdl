@@ -91,6 +91,19 @@ task step2 {
 
           for p in ${sep=" " phenolist}; do
 
+            N_cases_females=$(awk -v pheno=$p 'FNR==NR { females[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in females {print $1}' females <(zcat ${cov_pheno}) | wc -l)
+            N_cases_males=$(awk -v pheno=$p 'FNR==NR { males[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in males {print $1}' males <(zcat ${cov_pheno}) | wc -l)
+
+            echo "Female cases: "$N_cases_females
+            echo "Male cases: "$N_cases_males
+
+            if [[ $N_cases_females -lt 10 ]] || [[ $N_cases_males -lt 10 ]];
+            then
+              echo "Less than 10 cases in a sex. Skipping testing of sex specific effects."
+              touch ${prefix}"NOT_DONE.sex_spec.gz"
+              continue
+            fi
+
             base=${prefix}"_"$p".regenie.gz"
 
             zcat $base | awk 'NR==1{ for(i=1;i<=NF;i++) { h[$i]=i };
@@ -102,7 +115,7 @@ task step2 {
 
             nvars=$(cat $p".sex_variants"| wc -l  )
 
-            echo "$nvars will be tested for sex specific effects"
+            echo "$nvars variants will be tested for sex specific effects"
 
             if [[ $nvars -lt 1 ]];
             then
@@ -533,6 +546,8 @@ workflow regenie_step2 {
     output {
         Array[File] pheweb = gather.pheweb
         Array[File] pheweb_tbi = gather.pheweb_tbi
+        Array[File] regenie_sex_diff = gather.regenie_sex_diff
+        Array[File] regenie_sex_diff_tbi = gather.regenie_sex_diff_tbi
         Array[File] qq_out = gather.qq_out
         Array[File] qq_err = gather.qq_err
         Array[Array[File]] pngs = gather.pngs
