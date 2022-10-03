@@ -1,5 +1,5 @@
 {
-    "conditional_analysis.phenos_to_cond": "gs://r10-data/finemap/inputs/r10_phenos",
+    "conditional_analysis.phenos_to_cond": "gs://r10-data/regenie/release/r10_phenos",
     "conditional_analysis.chroms": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23"],  
     "conditional_analysis.release": "10",
     "conditional_analysis.sumstats_root": "gs://r10-data/regenie/release/summary_stats/PHENO.gz", 
@@ -32,5 +32,5 @@
 
     #DOCKERS
     "conditional_analysis.docker": "eu.gcr.io/finngen-refinery-dev/conditional_analysis:r9.8",
-    #"conditional_analysis.regenie_conditional.regenie_docker": "eu.gcr.io/finngen-refinery-dev/conditional_analysis:r9.8",
+    #"conditional_analysis.regenie_conditional.regenie_docker": "eu.gcr.io/finngen-refinery-dev/conditional_analysis:r9.8"
 }

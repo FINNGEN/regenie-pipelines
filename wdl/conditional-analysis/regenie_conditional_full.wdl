@@ -284,9 +284,11 @@ task filter_covariates {
     }
 
     String outfile = "./pheno_cov_map_" + threshold_cov_count + ".txt"
-    Int disk_size = ceil(size(pheno_file,'GB')) + 2
+    Int disk_size = ceil(size(pheno_file,'GB')) + 2 * 2
     
     command <<<
+
+      set -euxo pipefail
       
       python3 <<CODE
       
@@ -330,7 +332,8 @@ task filter_covariates {
               o.write(f"{pheno_name}\t{','.join(covs)}\n")
       
       CODE
-       >>>
+
+    >>>
       output {
 	File cov_pheno_map = outfile
 	File cov_pheno_warning = sub(outfile,'.txt','.err.txt')
@@ -339,7 +342,7 @@ task filter_covariates {
   runtime {
     cpu: "1"
     docker: "${docker}"
-    memory: "${disk_size} GB"
+    memory: "64 GB"
     disks: "local-disk ${disk_size} HDD"
     zones: "europe-west1-b europe-west1-c europe-west1-d"
     preemptible: "1"
