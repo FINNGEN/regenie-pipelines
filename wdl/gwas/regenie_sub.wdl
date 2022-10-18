@@ -270,20 +270,20 @@ task gather {
         if [[ "${is_binary}" == "true" ]]; then
             echo -e "`date`\tconverting to munged/$pheno.gz to a format used for importing to pheweb, omitting variants with -log10p NA (unsuccessful Firth/SPA)"
             zcat regenie/$pheno.regenie.gz | awk '
-            BEGIN {FS=" "; OFS="\t"; split("CHROM GENPOS ALLELE0 ALLELE1 LOG10P BETA SE A1FREQ A1FREQ_CASES A1FREQ_CONTROLS", REQUIRED_FIELDS)}
+            BEGIN {FS=" "; OFS="\t"; split("CHROM GENPOS ALLELE0 ALLELE1 ID LOG10P BETA SE A1FREQ A1FREQ_CASES A1FREQ_CONTROLS", REQUIRED_FIELDS)}
             NR==1 {for(i=1;i<=NF;i++) h[$i]=i;
                    for(i in REQUIRED_FIELDS) if (!(REQUIRED_FIELDS[i] in h)) {print REQUIRED_FIELDS[i]" expected in regenie header">>"/dev/stderr"; exit 1}
-                   print "#chrom","pos","ref","alt","pval","mlogp","beta","sebeta","af_alt","af_alt_cases","af_alt_controls"}
-            NR>1 && $h["LOG10P"]!="NA" {print $h["CHROM"],$h["GENPOS"],$h["ALLELE0"],$h["ALLELE1"],10^-$h["LOG10P"],$h["LOG10P"],$h["BETA"],$h["SE"],$h["A1FREQ"],$h["A1FREQ_CASES"],$h["A1FREQ_CONTROLS"]}' \
+                   print "#chrom","pos","ref","alt","id","pval","mlogp","beta","sebeta","af_alt","af_alt_cases","af_alt_controls"}
+            NR>1 && $h["LOG10P"]!="NA" {print $h["CHROM"],$h["GENPOS"],$h["ALLELE0"],$h["ALLELE1"],$h["ID"],10^-$h["LOG10P"],$h["LOG10P"],$h["BETA"],$h["SE"],$h["A1FREQ"],$h["A1FREQ_CASES"],$h["A1FREQ_CONTROLS"]}' \
             | bgzip > munged/$pheno.gz
         else
             echo -e "`date`\tconverting to munged/$pheno.gz to a format used for importing to pheweb"
             zcat regenie/$pheno.regenie.gz | awk '
-            BEGIN {FS=" "; OFS="\t"; split("CHROM GENPOS ALLELE0 ALLELE1 LOG10P BETA SE A1FREQ", REQUIRED_FIELDS)}
+            BEGIN {FS=" "; OFS="\t"; split("CHROM GENPOS ALLELE0 ALLELE1 ID LOG10P BETA SE A1FREQ", REQUIRED_FIELDS)}
             NR==1 {for(i=1;i<=NF;i++) h[$i]=i;
                    for(i in REQUIRED_FIELDS) if (!(REQUIRED_FIELDS[i] in h)) {print REQUIRED_FIELDS[i]" expected in regenie header">>"/dev/stderr"; exit 1}
-                   print "#chrom","pos","ref","alt","pval","mlogp","beta","sebeta","af_alt"}
-            NR>1  {print $h["CHROM"],$h["GENPOS"],$h["ALLELE0"],$h["ALLELE1"],10^-$h["LOG10P"],$h["LOG10P"],$h["BETA"],$h["SE"],$h["A1FREQ"]}' \
+                   print "#chrom","pos","ref","alt","id","pval","mlogp","beta","sebeta","af_alt"}
+            NR>1  {print $h["CHROM"],$h["GENPOS"],$h["ALLELE0"],$h["ALLELE1"],$h["ID"],10^-$h["LOG10P"],$h["LOG10P"],$h["BETA"],$h["SE"],$h["A1FREQ"]}' \
             | bgzip > munged/$pheno.gz
         fi
 
@@ -293,9 +293,10 @@ task gather {
 
         head $pheno
 
-        echo -e "`date`\trunning qqplot.R"
-        qqplot.R --file $pheno --chrcol "#chrom" --bp_col "pos" --pval_col "pval" --loglog_pval 10 > qq_out 2> qq_err
-
+        echo -e "`date`\t NOT running qqplot.R"
+        #qqplot.R --file $pheno --chrcol "#chrom" --bp_col "pos" --pval_col "pval" --loglog_pval 10 > qq_out 2> qq_err
+        touch qq_out
+        touch qq_err
         echo -e "`date`\ttabixing munged/$pheno.gz"
         tabix -s1 -b2 -e2 munged/$pheno.gz
         echo -e "`date`\tdone"
