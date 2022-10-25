@@ -54,12 +54,13 @@ workflow conditional_analysis {
 
    #merges all regions into single file
    Array[File] regenie_outputs = flatten(regenie_conditional.regenie_output)
-   call pheweb_import_munge{input:docker=docker,release=release,cond_locus_hits=results,regions=merge_regions.regions,regenie_outputs=regenie_outputs}
+   call pheweb_import_munge{input:docker=docker,release=release,prefix=prefix,cond_locus_hits=results,regions=merge_regions.regions,regenie_outputs=regenie_outputs}
 }
  
 task pheweb_import_munge{
   input {
     String release
+    String prefix
     File regions
     Array[File] cond_locus_hits
     String docker
@@ -68,18 +69,19 @@ task pheweb_import_munge{
 
   Int disk_size = ceil(size(cond_locus_hits,'GB')) + ceil(size(regenie_outputs,'GB')) + 10
   
-  String out_file = "finngen_R" + release + "_sql.merged.txt"
+  String out_file = prefix + "_sql.merged.txt"
   command <<<
 
     python3 <<CODE
     import os,sys,math
     
     release = '~{release}'
+    prefix = '~{prefix}'
     out_dir = "."
     region_file = '~{regions}'
     hits = '~{write_lines(cond_locus_hits)}'
 
-    out_file = os.path.join(out_dir,f"finngen_R{release}_sql.merged.txt")
+    out_file = os.path.join(out_dir,f"{prefix}_sql.merged.txt")
     #reads in all paths
     with open(hits) as f:hits_paths = [elem.strip() for elem in f.readlines()]
     #loop over region data, find matching file(s), merge info and build sql table
@@ -87,7 +89,7 @@ task pheweb_import_munge{
         count = 0
         for line in f:
             pheno,chrom,region,locus,*_ = line.strip().split()
-            id_string = f"{pheno}_{locus}"
+            id_string = f"{prefix}_{pheno}_{locus}"
             matches =[path for path in hits_paths if id_string in path]
             if matches:
                 assert len(matches)==1
