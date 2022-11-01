@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
 
-import argparse,os.path,shlex,subprocess,sys,subprocess,shlex,json,logging,multiprocessing,time
+import argparse,os.path,shlex,subprocess,sys,subprocess,shlex,json,logging,multiprocessing,time,math
 import numpy as np
-from utils import file_exists,make_sure_path_exists,tmp_bash,pretty_print,return_open_func,log_levels,basic_iterator,return_header,check_region
+from utils import file_exists,make_sure_path_exists,tmp_bash,pretty_print,return_open_func,log_levels,basic_iterator,return_header,check_region,inv_sub_dict
 from pathlib import Path
 import pandas as pd
 from collections import defaultdict as dd
 
 regenie_covariates= "SEX_IMPUTED,AGE_AT_DEATH_OR_END_OF_FOLLOWUP,PC1,PC2,PC3,PC4,PC5,PC6,PC7,PC8,PC9,PC10,IS_FINNGEN2_CHIP,BATCH_DS1_BOTNIA_Dgi_norm,BATCH_DS10_FINRISK_Palotie_norm,BATCH_DS11_FINRISK_PredictCVD_COROGENE_Tarto_norm,BATCH_DS12_FINRISK_Summit_norm,BATCH_DS13_FINRISK_Bf_norm,BATCH_DS14_GENERISK_norm,BATCH_DS15_H2000_Broad_norm,BATCH_DS16_H2000_Fimm_norm,BATCH_DS17_H2000_Genmets_norm,BATCH_DS18_MIGRAINE_1_norm,BATCH_DS19_MIGRAINE_2_norm,BATCH_DS2_BOTNIA_T2dgo_norm,BATCH_DS20_SUPER_1_norm,BATCH_DS21_SUPER_2_norm,BATCH_DS22_TWINS_1_norm,BATCH_DS23_TWINS_2_norm,BATCH_DS24_SUPER_3_norm,BATCH_DS25_BOTNIA_Regeneron_norm,BATCH_DS3_COROGENE_Sanger_norm,BATCH_DS4_FINRISK_Corogene_norm,BATCH_DS5_FINRISK_Engage_norm,BATCH_DS6_FINRISK_FR02_Broad_norm,BATCH_DS7_FINRISK_FR12_norm,BATCH_DS8_FINRISK_Finpcga_norm,BATCH_DS9_FINRISK_Mrpred_norm"
 
-sub_dict =  {str(elem):str(elem) for elem in range(1,23)}
-sub_dict.update({"X":"23"})
-inv_sub_dict = {v: k for k, v in sub_dict.items()}
 
 def filter_pheno(args):
     """
@@ -28,6 +25,8 @@ def filter_pheno(args):
         print('done.')
     return tmp_pheno
 
+
+
 def regenie_run(args,step,bgen,sample_file,pheno_file,covariates,condition_list,locus,null_file,pheno,region,log_file,threads,regenie_cmd = "regenie",params = ' ',):
     """
     Single regenie conditainal run. 
@@ -35,7 +34,7 @@ def regenie_run(args,step,bgen,sample_file,pheno_file,covariates,condition_list,
     """
    
     regenie_file = os.path.join(args.tmp_dir, f"{args.basename}_{pheno}.regenie") #default regenie output
-    out_file = os.path.join(args.out_dir, f"{args.basename}_{pheno}_{locus}_{step}.conditional") #file where to redirect output
+    out_file = os.path.join(args.tmp_dir, f"{args.basename}_{pheno}_{locus}_{step}.regenie.conditional") #file where to redirect output
     pretty_print(f"VARIANT:{condition_list[-1]}")
     logging.info(f"generating {out_file} ...")
 
@@ -85,7 +84,9 @@ def parse_sumstat_data(sumstats,pval_dict_file,column_names = ['#chrom','pos','m
         logging.info("reading original pvals..")
         
         header =return_header(sumstats)
-        columns = [header.index(elem) for elem in column_names]
+        # check if columns are integers or strings
+        if all([type(elem)==int for elem in column_names]):columns = column_names
+        else: columns = [header.index(elem) for elem in column_names]
         it = basic_iterator(sumstats,skiprows=1,columns = columns)
         for elem in it:
             chrom,pos,mlogp,ref,alt,beta,sebeta = elem
@@ -129,7 +130,48 @@ def get_sum_dict_data(sum_dict,variant):
     keys =  ["beta","sebeta","mlogp"]
     return [sum_dict[variant][elem] for elem in keys]
 
-def main(locus,region,args,tmp_pheno_file,sum_dict,threads):
+
+def pheweb_fix(out_files,out_dir,separator = " "):
+    '''
+    Function that is optionally called to create pheweb compatible files
+    '''
+    # convert regenie outputs to pheweb format
+
+    input_columns = ['CHROM', 'GENPOS', 'ID', 'ALLELE0', 'ALLELE1', 'A1FREQ', 'INFO', 'N', 'TEST', 'BETA', 'SE', 'CHISQ', 'LOG10P', 'EXTRA']
+    out_columns = ['SNPID','CHR','rsid','POS','Allele1','Allele2','AF_Allele2','p.value_cond','BETA_cond','SE_cond']
+
+    #mapping of column content
+    map_columns = {"SNPID":"ID","CHR":"CHROM","rsid":"ID","POS":"GENPOS","Allele1":"ALLELE0","Allele2":"ALLELE1","AF_Allele2":"A1FREQ","p.value_cond":"LOG10P","BETA_cond":'BETA','SE_cond':'SE'}
+
+    # LOOP THROUFH FILES AND FIX THEM ONE BY ONE
+    for i,f in enumerate(out_files):
+        basename = os.path.basename(f).replace('.regenie.conditional','.conditional')
+        saige_file = os.path.join(out_dir,basename)
+        sys.stdout.write("\r%s" % f"{saige_file} {i+1}/{len(out_files)}                                                ")
+        sys.stdout.flush()
+
+
+        with open(f) as i,open(saige_file,'wt') as o:
+            header_index = {h:i for i,h in enumerate(next(i).strip().split(separator))}
+            o.write(separator.join(out_columns) +'\n')
+            for line in i:
+                line = line.strip().split(separator)
+                out_line = []
+                for key in out_columns:
+                    #i take the column mapping and then i get the data from the input header mapping in return
+                    data_index = header_index[map_columns[key]]
+                    value = str(line[data_index])                    #get data from input 
+                    if key =="p.value_cond":
+                        value =  math.pow(10,-float(value)) #fix pval
+                        
+                    out_line.append(value)
+
+                o.write(separator.join(map(str,out_line)) +'\n')
+    print("\ndone.")
+    return
+
+
+def main(locus,region,args,tmp_pheno_file,sum_dict,threads,pheweb_flag):
 
     pretty_print(f"{locus} {region} conditional chain.",50)
     #define log_file
@@ -146,13 +188,15 @@ def main(locus,region,args,tmp_pheno_file,sum_dict,threads):
 
         print(f"Variant info from original FG sumstats {map_vals_to_string(get_sum_dict_data(sum_dict,condition_variant))}")
         step,condition_list = 1,[locus]
-        # step is non 0 if hit is significant. Else truncate when max step is reached 
+        # step is non 0 if hit is significant. Else truncate when max step is reached
+        regenie_outputs = []
         while 0 <  step <= args.max_steps:
             out_file,ret = regenie_run(args,step,args.bgen,args.sample_file,tmp_pheno_file,args.covariates,condition_list,locus,args.null_file,args.pheno,region,log_file,threads,params = args.regenie_params)
             if ret:
                 logging.error(f"RUN FAILED,check {log_file} for errors.")
                 return
             # now that we have results, let's analyze them to make sure the top hit is significant
+            regenie_outputs.append(out_file)
             step,data =check_hit(out_file,step,args.pval_threshold)
             if step:
                 new_variant = data[0]
@@ -166,6 +210,15 @@ def main(locus,region,args,tmp_pheno_file,sum_dict,threads):
             else:
                 print("Hit not significant. Ending loop.")
 
+    if pheweb_flag:
+        pretty_print("PHEWEB_FIXES")
+        pheweb_fix(regenie_outputs,args.out_dir)
+        chrom,limits =region.split("--range")[1].strip().split(":")
+        start,end = limits.split("-")
+        sql_line =[f'"{elem}"' for elem in   ["RELEASE","conditional",args.pheno,chrom,start,end,len(condition_list),"",",".join(condition_list),f"{args.basename}_{args.pheno}_"]]
+        sql_file = args.out + f"_{args.pheno}_{locus}.sql"
+        print(f"Logging to {sql_file}")
+        with open(sql_file,'wt') as o:o.write(','.join(sql_line) + '\n')
 
 
 if __name__ == '__main__':
@@ -180,18 +233,20 @@ if __name__ == '__main__':
     parser.add_argument('--bgen',type = file_exists,help ='Path to bgen',required=True)
     parser.add_argument('--sample-file',type = file_exists,help ='Path to bgen sample file (if not in same directory as bgen)',required=False)
     parser.add_argument('--sumstats',type = file_exists,help ='Path to original sumstats',required=True)
-    parser.add_argument('--regenie-params',type=str,help ='extra bgen params',default = ' --bt --bsize 200 ' )
+    parser.add_argument('--regenie-params',type=str,help ='extra bgen params',default = ' --bt --bsize 200 --ref-first' )
     parser.add_argument('--null-file',type = file_exists,help ='File with null info.',required=True)
     parser.add_argument('--force',action = 'store_true',help = 'Flag for forcing re-run.')
+    parser.add_argument('--pheweb',action = 'store_true',help = 'Flag for creating pheweb compatible files.')
+
     parser.add_argument( "-log",  "--log",  default="warning", choices = log_levels, help=(  "Provide logging level. " "Example --log debug', default='warning'"))
     parser.add_argument('--max-steps',type = int,default =10)
-    parser.add_argument('--chr_col','--chr-col', default="#chrom", type=str)
-    parser.add_argument('--pos_col','--pos-col', default="pos", type=str)
-    parser.add_argument('--ref_col','--ref-col', default="ref", type=str)
-    parser.add_argument('--alt_col','--alt-col',default="alt", type=str)
-    parser.add_argument('--mlogp_col','--mlogp-col', default="mlogp", type=str)
-    parser.add_argument('--beta_col','--beta-col', default="beta", type=str)
-    parser.add_argument('--sebeta_col','--sebeta-col', default="sebeta", type=str)
+    parser.add_argument('--chr_col','--chr-col', default="#chrom")
+    parser.add_argument('--pos_col','--pos-col', default="pos")
+    parser.add_argument('--ref_col','--ref-col', default="ref")
+    parser.add_argument('--alt_col','--alt-col',default="alt")
+    parser.add_argument('--mlogp_col','--mlogp-col', default="mlogp")
+    parser.add_argument('--beta_col','--beta-col', default="beta")
+    parser.add_argument('--sebeta_col','--sebeta-col', default="sebeta")
     parser.add_argument('--threads',type = int,help ='Number of threads.',default =  multiprocessing.cpu_count())
 
 
@@ -200,6 +255,7 @@ if __name__ == '__main__':
     range_group.add_argument('--locus-list',type = file_exists,help="File with list of locus and regions")
 
     args = parser.parse_args()
+
     
 
     args.out_dir,args.basename = os.path.dirname(args.out),os.path.basename(args.out)
@@ -210,7 +266,8 @@ if __name__ == '__main__':
     # logging level
     level = log_levels[args.log]
     logging.basicConfig(level=level,format="%(levelname)s: %(message)s")
-    
+
+  
     # automatically look for sample file if not explicitly passed.
     if not args.sample_file:
         for sample_file in [args.bgen.replace('.bgen',elem) for elem in ['.bgen.sample','.sample']]:
@@ -224,7 +281,14 @@ if __name__ == '__main__':
     
     # gets original sumstats data for variants
     pval_dict_file = os.path.join(args.tmp_dir,f"{args.pheno}_pvals.json")
-    columns= [args.chr_col,args.pos_col,args.mlogp_col,args.ref_col,args.alt_col,args.beta_col,args.sebeta_col]
+
+    # MAKE SURE COLUMNS ARE ALL INTS OR STRINGS
+    columns = [int(elem) if elem.isdigit() else elem for elem in [args.chr_col,args.pos_col,args.mlogp_col,args.ref_col,args.alt_col,args.beta_col,args.sebeta_col]]
+    types= list(set([type(elem) for elem in columns]))
+    if (len(types) != 1) or (types[0] not in [int,str]):
+        print(columns)
+        raise ValueError("All column types should be the same.")
+    
     sum_dict = parse_sumstat_data(args.sumstats,pval_dict_file,columns)
 
     # formatting of args for regenie
@@ -239,9 +303,9 @@ if __name__ == '__main__':
     logging.info(f"Using {args.threads} cpus for the regenie run.")
 
     # create tmp pheno file (lighter)
-    tmp_pheno_file = filter_pheno(args) 
+    tmp_pheno_file = filter_pheno(args)
     for locus,region in region_list:
-        main(locus,region,args,tmp_pheno_file,sum_dict,args.threads)
+        main(locus,region,args,tmp_pheno_file,sum_dict,args.threads,args.pheweb)
                 
     
     

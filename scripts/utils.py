@@ -2,6 +2,11 @@ import os,subprocess,sys,csv,gzip,logging,mmap,re
 from tempfile import NamedTemporaryFile
 from functools import partial
 
+sub_dict =  {str(elem):str(elem) for elem in range(1,23)}
+sub_dict.update({"X":"23"})
+inv_sub_dict = {v: k for k, v in sub_dict.items()}
+
+
 def return_columns(l,columns):
     '''
     Returns all columns, or rather the elements, provided the columns
@@ -141,6 +146,7 @@ def extract_int_from_string(s):
     return re.search(r'\d+', s).group()
 
 
+
 def progressBar(value, endvalue, bar_length=20):
     '''
     Writes progress bar, given value (eg.current row) and endvalue(eg. total number of rows)
@@ -156,4 +162,5 @@ def progressBar(value, endvalue, bar_length=20):
 def check_region(locus,region):
     if ':' in locus and  '-' in locus:
         locus,region = region,locus
+    
     return locus,f" --range {region} "

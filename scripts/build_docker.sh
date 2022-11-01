@@ -21,7 +21,7 @@ FINNGEN_TAG=$1
 
 ### if this is given then does not rebuild regenie docker but uses this as base docker for building finngen docker
 ## leave empty or undefined to build regenie first.
-#BASE_REGENIE_DOCKER="eu.gcr.io/finngen-refinery-dev/regenie:3.1.1_r9_base"
+BASE_REGENIE_DOCKER="eu.gcr.io/finngen-refinery-dev/regenie:3.1.1_r9_base"
 
 TAG=$(cat VERSION)"_"$FINNGEN_TAG
 
