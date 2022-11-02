@@ -103,32 +103,38 @@ for( pcol in pcols) {
   print("subsetting p-vals < 0.01 for manhattan...")
 
   subdata <- subdata[ subdata[[pcol]]<0.01 & subdata[[pcol]]>0 ]
-  print( paste0("Plotting manhattan with ", nrow(subdata), " variants") )
-  print( summary(subdata[[pcol]] ))
-  png( paste(output_prefix,"_",pcol,"_manhattan.png", sep=""), width=1000, height=400)
-  logs <- -log10(subdata[[pcol]])
+  if nrow(subdata)>=1{
+    print( paste0("Plotting manhattan with ", nrow(subdata), " variants") )
+    print( summary(subdata[[pcol]] ))
+    png( paste(output_prefix,"_",pcol,"_manhattan.png", sep=""), width=1000, height=400)
+    logs <- -log10(subdata[[pcol]])
 
-  ## upgraded qqman package requires snp column.
-  subdata$SNP <- as.character(seq(1,nrow(subdata),1))
+    ## upgraded qqman package requires snp column.
+    subdata$SNP <- as.character(seq(1,nrow(subdata),1))
 
-  manhattan( data.table(subdata[,c("SNP",bp_col,pcol,chr_col), with=F]) , chr=chr_col, bp=bp_col, p=pcol, ylim=c( 2,max(logs)+1), main=file)
-  dev.off()
+    manhattan( data.table(subdata[,c("SNP",bp_col,pcol,chr_col), with=F]) , chr=chr_col, bp=bp_col, p=pcol, ylim=c( 2,max(logs)+1), main=file)
+    dev.off()
 
 
-  print("plotting log-log manhattan")
-  loglog_p <- opt$options$loglog_pval
-  logs <- ifelse(logs < loglog_p, logs, loglog_p * log10(logs) / log10(loglog_p))
-  loglog_ylim <- opt$options$loglog_ylim
-  if (loglog_ylim==0) {
-    max_loglog <- max(logs)
-  } else {
-    max_loglog <- loglog_p * log10(loglog_ylim) / log10(loglog_p)
-  }
-  subdata[["p_scaled"]] <- 10^(-logs)
-  tick_pos <- round(seq(1, max_loglog, length.out=max_loglog))
-  tick_lab <- sapply(tick_pos, function(pos) { round(ifelse(pos < loglog_p, pos, loglog_p^(pos/loglog_p))) })
-  png( paste(output_prefix,"_",pcol,"_manhattan_loglog.png", sep=""), width=1000, height=400)
-  manhattan( data.table(subdata[,c("SNP",bp_col,"p_scaled",chr_col), with=F]) , chr=chr_col, bp=bp_col, p="p_scaled", ylim=c( 2,max_loglog), yaxt="n", main=file)
-  axis(2, at = tick_pos, labels=tick_lab, las=2)
-  dev.off()
+    print("plotting log-log manhattan")
+    loglog_p <- opt$options$loglog_pval
+    logs <- ifelse(logs < loglog_p, logs, loglog_p * log10(logs) / log10(loglog_p))
+    loglog_ylim <- opt$options$loglog_ylim
+    if (loglog_ylim==0) {
+        max_loglog <- max(logs)
+    } else {
+        max_loglog <- loglog_p * log10(loglog_ylim) / log10(loglog_p)
+    }
+    subdata[["p_scaled"]] <- 10^(-logs)
+    tick_pos <- round(seq(1, max_loglog, length.out=max_loglog))
+    tick_lab <- sapply(tick_pos, function(pos) { round(ifelse(pos < loglog_p, pos, loglog_p^(pos/loglog_p))) })
+    png( paste(output_prefix,"_",pcol,"_manhattan_loglog.png", sep=""), width=1000, height=400)
+    manhattan( data.table(subdata[,c("SNP",bp_col,"p_scaled",chr_col), with=F]) , chr=chr_col, bp=bp_col, p="p_scaled", ylim=c( 2,max_loglog), yaxt="n", main=file)
+    axis(2, at = tick_pos, labels=tick_lab, las=2)
+    dev.off()
+}
+else {
+    print("Could not print manhattan plot. Reason: No variants with p-val < 0.01")
+}
+
 }
