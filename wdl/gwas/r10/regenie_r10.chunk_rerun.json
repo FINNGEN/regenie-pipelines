@@ -1,0 +1,35 @@
+{
+    "regenie.sub_step1.docker": "eu.gcr.io/finngen-refinery-dev/regenie:2.2.4_FG_0.1.3",
+    "regenie.sub_step2.docker": "eu.gcr.io/finngen-refinery-dev/regenie:2.2.4_FG_0.1.3",
+
+    "regenie.phenolist": "gs://r10-data/regenie/input/to_rerun",
+    "regenie.is_binary": true,
+    "regenie.cov_pheno": "gs://r10-data/pheno/R10_COV_PHENO_V1.FID.txt.gz",
+    "regenie.covariates": "SEX_IMPUTED,AGE_AT_DEATH_OR_END_OF_FOLLOWUP,PC{1:10},IS_FINNGEN2_CHIP",
+
+    "regenie.auto_remove_sex_covar": true,
+    "regenie.sex_col_name": "SEX_IMPUTED",
+
+    "regenie.sub_step2.run_sex_specific": true,
+    "regenie.sub_step2.step2.sex_specific_logpval": 1.623249,
+
+    "regenie.sub_step1.step1.covariate_inclusion_threshold": 10,
+    "regenie.sub_step1.step1.grm_bed": "gs://r10-data/grm/R10_GRM_V0_LD_0.2.bed",
+    "regenie.sub_step1.step1.bsize": 1000,
+    "regenie.sub_step1.step1.options": "--loocv",
+
+    "regenie.sub_step2.bgenlist": "gs://r10-data/bgen/finngen_R10_bgen_chunks.txt",
+    "regenie.sub_step2.step2.test": "additive",
+    "regenie.sub_step2.step2.bsize": 400,
+    "regenie.sub_step2.step2.options": "--firth --approx --pThresh 0.01 --firth-se",
+
+    "regenie.sub_step2.gather.docker": "eu.gcr.io/finngen-refinery-dev/saige:0.39.1-fg",
+
+    "regenie.sub_step2.summary.docker": "eu.gcr.io/finngen-refinery-dev/saige:0.39.1-fg-pysam",
+    "regenie.sub_step2.summary.finngen_annotation": "gs://r10-data/annotation/R10_annotated_variants_v0.gz",
+    "regenie.sub_step2.summary.gnomad_annotation": "gs://r4_data_west1/gnomad_functional_variants/fin_enriched_genomes_select_columns.txt.gz",
+    "regenie.sub_step2.summary.summary_pval_thresh": 1e-6,
+    "regenie.sub_step2.summary.coding_pval_thresh": 1e-4,
+
+    "regenie.coding_gather.docker": "eu.gcr.io/finngen-refinery-dev/bioinformatics:0.7"
+}
