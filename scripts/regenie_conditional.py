@@ -58,12 +58,12 @@ def regenie_run(args,step,bgen,sample_file,pheno_file,covariates,condition_list,
         
         cmd = f'{regenie_cmd} --step 2   {params} --bgen {bgen}  {sample_cmd} --out {os.path.join(args.tmp_dir,args.basename)}  --pred {pred_file} --phenoFile {pheno_file} --phenoCol {pheno} --condition-list {tmp_variant} {region}  --covarFile {pheno_file} --covarColList {covariates} --threads {threads}'
         logging.debug(cmd)
-        logmode = 'wt' if step == 0 else 'a'
+        logmode = 'wt' if step == 1 else 'a'
         with open(log_file,logmode) as o:
             start = time.time()
             ret = subprocess.call(shlex.split(cmd),stdout=o)
             logging.info(f"Script ran in {time.time() - start} seconds with {threads} cpus.")
-            
+            logging.info(f"{cmd}")
         #spring cleaning if run is successful
         if not ret:
             os.replace(regenie_file,out_file)
