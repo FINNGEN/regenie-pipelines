@@ -15,7 +15,7 @@
     "conditional_analysis.alt_col": "alt",
     
     #REGENIE
-    "conditional_analysis.regenie_conditional.bgen_root": "gs://r10-data/conditional_analysis/bgen/finngen_R10_annotated_CHROM.bgen",
+    "conditional_analysis.regenie_conditional.bgen_root": "gs://r10-data/bgen/chrom/finngen_R10_CHROM.bgen",
     "conditional_analysis.regenie_conditional.null_root": "gs://r10-data/regenie/demopheno/nulls/R10_GRM_V0_LD_0.2.PHENO.loco.gz",
     "conditional_analysis.regenie_conditional.sebeta": "beta",
     "conditional_analysis.regenie_conditional.beta": "sebeta",

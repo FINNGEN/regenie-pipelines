@@ -11,7 +11,7 @@
 
 
     # CONDITIONAL ANALYSIS PARAMS
-    "regenie_cond_sb.regenie_conditional.bgen_root": "gs://r10-data/conditional_analysis/bgen/finngen_R10_annotated_CHROM.bgen",
+    "regenie_cond_sb.regenie_conditional.bgen_root": "gs://r10-data/bgen/chrom/finngen_R10_CHROM.bgen",
     "regenie_cond_sb.regenie_conditional.max_steps": 10,
     "regenie_cond_sb.regenie_conditional.null_root": "gs://r10-data/regenie/release/loco/R10_GRM_V0_LD_0.2.PHENO.loco.gz",
     "regenie_cond_sb.regenie_conditional.cpus": 4,

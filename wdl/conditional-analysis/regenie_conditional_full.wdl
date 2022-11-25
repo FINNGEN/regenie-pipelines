@@ -235,7 +235,7 @@ task regenie_conditional {
   File null =sub(null_root,"PHENO",pheno)
   File bgen = sub(bgen_root,'CHROM',chrom)
   File bgen_sample = bgen + ".sample"
-  File bgen_index = bgen + ".bgi"
+  #File bgen_index = bgen + ".bgi" turns out this is the issue with the chr prefix
 
 
   # runtime params based on file sizes
