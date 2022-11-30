@@ -1,0 +1,21 @@
+{
+    "regenie.sub_step2.summary.summary_pval_thresh": 1e-6,
+    "regenie.sub_step2.step2.grm_bed": "gs://r10-data/grm/R10_GRM_V0_LD_0.2.bed",
+    "regenie.sub_step2.summary.docker": "eu.gcr.io/finngen-refinery-dev/saige:0.39.1-fg-pysam",
+    "regenie.covariates": "SEX_IMPUTED,AGE_AT_DEATH_OR_END_OF_FOLLOWUP,PC{1:10},IS_FINNGEN2_CHIP,BATCH_DS1_BOTNIA_Dgi_norm,BATCH_DS10_FINRISK_Palotie_norm,BATCH_DS11_FINRISK_PredictCVD_COROGENE_Tarto_norm,BATCH_DS12_FINRISK_Summit_norm,BATCH_DS13_FINRISK_Bf_norm,BATCH_DS14_GENERISK_norm,BATCH_DS15_H2000_Broad_norm,BATCH_DS16_H2000_Fimm_norm,BATCH_DS17_H2000_Genmets_norm_relift,BATCH_DS18_MIGRAINE_1_norm_relift,BATCH_DS19_MIGRAINE_2_norm,BATCH_DS2_BOTNIA_T2dgo_norm,BATCH_DS20_SUPER_1_norm_relift,BATCH_DS21_SUPER_2_norm_relift,BATCH_DS22_TWINS_1_norm,BATCH_DS23_TWINS_2_norm_nosymmetric,BATCH_DS24_SUPER_3_norm,BATCH_DS25_BOTNIA_Regeneron_norm,BATCH_DS26_DIREVA_norm,BATCH_DS27_NFBC66_norm,BATCH_DS28_NFBC86_norm,BATCH_DS3_COROGENE_Sanger_norm,BATCH_DS4_FINRISK_Corogene_norm,BATCH_DS5_FINRISK_Engage_norm,BATCH_DS6_FINRISK_FR02_Broad_norm_relift,BATCH_DS7_FINRISK_FR12_norm,BATCH_DS8_FINRISK_Finpcga_norm,BATCH_DS9_FINRISK_Mrpred_norm",
+    "regenie.cov_pheno": "gs://r10-data/pheno/R10_COV_PHENO_V1.FID.txt.gz",
+    "regenie.sub_step2.summary.finngen_annotation": "gs://r10-data/annotation/R10_annotated_variants_v0.gz",
+    "regenie.sub_step2.summary.gnomad_annotation": "gs://r4_data_west1/gnomad_functional_variants/fin_enriched_genomes_select_columns.txt.gz",
+    "regenie.sub_step2.gather.docker": "eu.gcr.io/finngen-refinery-dev/saige:0.39.1-fg",
+    "regenie.sub_step2.step2.bsize": 400,
+    "regenie.coding_gather.docker": "eu.gcr.io/finngen-refinery-dev/saige:0.39.1-fg",
+    "regenie.sub_step2.summary.coding_pval_thresh": 1,
+    "regenie.is_binary": true,
+    "regenie.sub_step2.bgenlist": "gs://r10-data/bgen/r10_coding_variants_bgenlist.txt",
+    "regenie.sub_step2.docker": "eu.gcr.io/finngen-refinery-dev/regenie:2.2.4_FG_0.1.3",
+    "regenie.phenolist": "gs://r10-data/regenie/input/R10_recessive_analysis_endpoints_0",
+    "regenie.sub_step2.step2.options": "--firth --approx --pThresh 0.01 --firth-se",
+    "regenie.sub_step2.step2.test": "recessive",
+    "regenie.nullsfiletemplate": "gs://r10-data/regenie/release/firth/R10_GRM_V0_LD_0.2.PHENO.firth.gz",
+    "regenie.locofiletemplate": "gs://r10-data/regenie/release/loco/R10_GRM_V0_LD_0.2.PHENO.loco.gz"
+  }
