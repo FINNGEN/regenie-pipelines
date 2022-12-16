@@ -38,7 +38,7 @@
 
 
     #DOCKERS
-    "conditional_analysis.docker": "eu.gcr.io/finngen-refinery-dev/regenie:3.1.1_r9_base ",
+    "conditional_analysis.docker": "eu.gcr.io/finngen-refinery-dev/regenie:3.2.3_r10_conditional.1",
     #"conditional_analysis.regenie_conditional.regenie_docker": "eu.gcr.io/finngen-refinery-dev/conditional_analysis:r9.2 ",
 
 }

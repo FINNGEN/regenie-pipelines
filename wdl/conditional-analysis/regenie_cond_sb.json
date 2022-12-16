@@ -6,14 +6,14 @@
     "regenie_cond_sb.chroms": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23"],  
 
     # REQUIRED DOCKERS
-    "regenie_cond_sb.docker": "eu.gcr.io/finngen-refinery-dev/conditional_analysis:r9.8",
+    "regenie_cond_sb.docker": "eu.gcr.io/finngen-refinery-dev/regenie:3.2.3_r10_conditional.1",
     "regenie_cond_sb.finemap_regions.docker": "eu.gcr.io/finngen-refinery-dev/finemap-suite:fix_55-v2.al",
 
 
     # CONDITIONAL ANALYSIS PARAMS
-    "regenie_cond_sb.regenie_conditional.bgen_root": "gs://r10-data/bgen/chrom/finngen_R10_CHROM.bgen",
+    "regenie_cond_sb.regenie_conditional.bgen_root": "gs://finngen-production-library-red/finngen_R10/bgen/data/chrom/finngen_R10_CHROM.bgen",
     "regenie_cond_sb.regenie_conditional.max_steps": 10,
-    "regenie_cond_sb.regenie_conditional.null_root": "gs://r10-data/regenie/release/loco/R10_GRM_V0_LD_0.2.PHENO.loco.gz",
+    "regenie_cond_sb.regenie_conditional.null_root": "gs://finngen-production-library-red/finngen_R10/regenie_nulls_1.0/data/R10_GRM_V0_LD_0.2.PHENO.loco.gz",
     "regenie_cond_sb.regenie_conditional.cpus": 4,
     #"regenie_cond_sb.regenie_conditional.regenie_params": "String? (optional)",
     #"regenie_cond_sb.regenie_conditional.regenie_docker": "String? (optional)",
