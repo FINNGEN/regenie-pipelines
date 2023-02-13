@@ -62,7 +62,40 @@ task step1 {
        else
           covars=${covariates}
        fi
+        zcat ${cov_pheno}|awk '
+        BEGIN {
+        FS = "\t"
+        _items = split("${sep="," phenolist}",phenos,",")
+        }
+        NR == 1 {
+        for(i = 1; i <= NF; i++) {
+        h[$i] = i
+        }
+        for (phkey in phenos){
+        exists=phenos[phkey] in h
+        if (!exists) {
+        print "Phenotype:"phenos[phkey]" not found in the given phenotype file." > "/dev/stderr"
+        err = 1
+        exit 1
+        }
+        }
 
+        }
+        NR > 1 {
+        for (pk in phenos){
+        if ($h[phenos[pk]] != "NA"){
+        vals[phenos[pk]$h[phenos[pk]]] +=1
+        }
+        }
+        }
+        END{
+        if (!err) {
+        for (pk in phenos){
+        printf "{\"phenotype\":%s,\"cases\":%d,\"controls\":%d}",phenos[pk],vals[phenos[pk]"1"],vals[phenos[pk]"0"] > phenos[pk]"_cases_controls.json"
+        }
+        }
+        }
+        '
 
         #filter out covariates with too few observations
         COVARFILE=${cov_pheno}
@@ -181,6 +214,7 @@ task step1 {
         String covars_used = read_string("new_covars")
         File covariatelist = "new_covars"
         Boolean  is_single_sex = read_boolean("is_single_sex")
+        Array[File] case_control_counts = glob("*_cases_controls.json")
     }
 
     runtime {
@@ -217,5 +251,6 @@ workflow regenie_step1 {
         Array[File] nulls = step1.nulls
         String covars_used = step1.covars_used
         Boolean is_single_sex = step1.is_single_sex
+        Array[File] case_control_counts = step1.case_control_counts
     }
 }
