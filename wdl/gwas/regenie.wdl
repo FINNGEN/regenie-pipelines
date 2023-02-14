@@ -55,4 +55,16 @@ workflow regenie {
     call coding_gather {
         input: files=sub_step2.coding
     }
+
+output
+                    {
+                       
+                        File coding_var=coding_gather.coding_variants
+                        Array[File] pheweb_sumst=flatten(sub_step2.pheweb)
+                        Array[File] pheweb_sumst_tbi=flatten(sub_step2.pheweb_tbi)
+                        Array[File] plots=flatten(flatten(sub_step2.pngs))
+                        Array[File] quant=flatten(flatten(sub_step2.quantiles))
+                        Array[File] sig_stat=flatten(sub_step2.summary)
+                        Array[File] casecontNjson=flatten(sub_step1.case_control_counts) 
+                    }
 }
