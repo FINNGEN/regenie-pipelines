@@ -19,7 +19,7 @@ task step1 {
 
     command <<<
 
-  #      set -euxo pipefail
+        # set -euxo pipefail
 
         n_cpu=`grep -c ^processor /proc/cpuinfo`
         is_single_sex=$(zcat ${cov_pheno} | awk -v sexcol=${sex_col_name} -v phenocols=${sep="," phenolist} \
@@ -28,7 +28,6 @@ task step1 {
             for(i=1;i<=NF;i++) {h[$i]=i;};
             split(phenocols,ps, ",");
             prev="";
-            is_single=1;
             for(pi in ps) {
               if(!(ps[pi] in h)) {
                  print "Given phenotype " ps[pi] " does not exist in phenofile" > "/dev/stderr"; exit 1;
@@ -187,7 +186,7 @@ task step1 {
 
         docker: "${docker}"
         cpu: if length(phenolist) == 1 then 1 else if length(phenolist) <=10 then 2 else 4
-        memory: if length(phenolist) == 1 then "8 GB" else "10 GB"
+        memory: if length(phenolist) == 1 then "12 GB" else "16 GB"
         disks: "local-disk 200 HDD"
         zones: "europe-west1-b europe-west1-c europe-west1-d"
         preemptible: 2
