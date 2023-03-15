@@ -329,9 +329,7 @@ task summary{
 
     File input_file
     File finngen_annotation
-    File gnomad_annotation
     File finngen_tbi = finngen_annotation + ".tbi"
-    File gnomad_tbi = gnomad_annotation + ".tbi"
 
     Float summary_pval_thresh
     Float coding_pval_thresh
@@ -343,7 +341,6 @@ task summary{
         #read file
         fname = "${input_file}"
         finngen_annotation_file = "${finngen_annotation}"
-        gnomad_annotation_file  = "${gnomad_annotation}"
         summary_threshold = ${summary_pval_thresh}
         coding_threshold = ${coding_pval_thresh}
 
@@ -369,58 +366,30 @@ task summary{
         pheno = os.path.splitext(os.path.basename(fname))[0]
         output_summary_name = pheno + "_summary.txt"
         output_coding_name = pheno + "_coding.txt"
-        FGAnnotation = NamedTuple('FGAnnotation',[('gene',str),('consequence',str)])
-        GnomadAnnotation = NamedTuple('GnomadAnnotation',[('finaf',str),('nfeaf',str),('enrich',str),('rsid',str)])
-
+        FGAnnotation = NamedTuple('FGAnnotation',[('gene',str),('consequence',str),('rsid',str),('EXOME_enrichment_nfsee',str),('GENOME_enrichment_nfee',str)])
         def get_header(reader,file):
             with reader(file, "rt") as f:
                 l = f.readline()
                 return l.strip("\n").split("\t")
 
-        def get_fg_annotation(iterator,variant,gene_idx, consequence_idx,variant_idx) -> FGAnnotation:
+        def get_fg_annotation(iterator,variant,gene_idx,consequence_idx,rsid_idx,exome_enr_idx,genome_enr_idx,variant_idx) -> FGAnnotation:
             for v in iterator:
                 cols = v.strip("\n").split("\t")
                 if cols[variant_idx] == variant:
-                    return FGAnnotation(cols[gene_idx],cols[consequence_idx])
+                    return FGAnnotation(cols[gene_idx],cols[consequence_idx],cols[rsid_idx],cols[exome_enr_idx],cols[genome_enr_idx])
             return FGAnnotation("","")
 
-        def get_gnomad_annotation(iterator,cpra,finaf_idx, nfeaf_idx, rsid_idx,gd_cpra) -> GnomadAnnotation:
-            for v in iterator:
-                cols = v.strip("\n").split("\t")
-
-                if (cols[gd_cpra[0]] == "chr"+cpra[0]) and (cols[gd_cpra[1]] == str(cpra[1])) and (cols[gd_cpra[2]] == cpra[2]) and (cols[gd_cpra[3]] == cpra[3]):
-                    return GnomadAnnotation(cols[finaf_idx],cols[nfeaf_idx],cols[enrich_idx],cols[rsid_idx])
-            return GnomadAnnotation(".",".",".",".")
-
         #required columns
-        fg_req_cols=["#variant","gene_most_severe","most_severe"]
-        gd_req_cols=["fin.AF","nfsee.AF","enrichment_nfsee","rsid"]
+        fg_req_cols=["#variant","gene_most_severe","most_severe","rsid","EXOME_enrichment_nfsee","GENOME_enrichment_nfee"]
         #open finngen annotation tabix
         fg_tabix = pysam.TabixFile(finngen_annotation_file,parser=None)
         #get fg header column positions
         fg_header = get_header(gzip.open, finngen_annotation_file)
         fg_idx = {v:i for (i,v) in enumerate(fg_header)}
-        #open gnomad annotation tabix
-        gnomad_tabix = pysam.TabixFile(gnomad_annotation_file,parser=None)
-        gd_header = get_header(gzip.open, gnomad_annotation_file)
-        gd_idx = {v:i for (i,v) in enumerate(gd_header)}
-        gd_cpra = (
-            gd_idx["chrom"],
-            gd_idx["pos"],
-            gd_idx["ref"],
-            gd_idx["alt"]
-        )
         #check for fg column existence
         if not all([a in fg_header for a in fg_req_cols]):
             raise Exception("Not all columns present in FinnGen annotation! Aborting...")
-        #check for gnomad column existence
-        if not all([a in gd_header for a in gd_req_cols]):
-            raise Exception("Not all columns present in Gnomad annotation! Aborting...")
-        var_idx, gene_idx, cons_idx = (fg_idx["#variant"],fg_idx["gene_most_severe"],fg_idx["most_severe"])
-
-        finaf_idx, nfeaf_idx, enrich_idx, rsid_idx = (gd_idx["fin.AF"],gd_idx["nfsee.AF"],gd_idx["enrichment_nfsee"],gd_idx["rsid"])
-
-
+        var_idx, gene_idx, cons_idx, rsid_idx, exome_enr_idx, genome_enr_idx = (fg_idx["#variant"],fg_idx["gene_most_severe"],fg_idx["most_severe"],fg_idx["rsid"],fg_idx["EXOME_enrichment_nfsee"],fg_idx["GENOME_enrichment_nfee"])
 
         with gzip.open(fname, "rt") as file:
             #open output file
@@ -437,11 +406,9 @@ task summary{
                     header_idx["alt"]
                 )
 
-                #add gene name, consequence, gnomad finnish af, nfsee af, rsid
-                header.extend(["fin.AF","nfsee.AF","rsid","gene_most_severe","most_severe"])
+                #add rsid, gene name, consequence, enrichments, phenotype
+                header.extend(["rsid","gene_most_severe","most_severe","EXOME_enrichment_nfsee","GENOME_enrichment_nfee","phenotype"])
                 summary_outfile.write("\t".join(header)+"\n")
-                #add pheno, fin enrichment
-                header.extend(["fin.enrichment","phenotype"])
                 coding_outfile.write("\t".join(header)+"\n")
 
                 #read lines
@@ -451,22 +418,18 @@ task summary{
                     if pvalue < coding_threshold or pvalue < summary_threshold:
                         cpra= (line_columns[cid],int(float(line_columns[pid])),line_columns[rid],line_columns[aid])
                         variant = "{}:{}:{}:{}".format(cpra[0],cpra[1],cpra[2],cpra[3])
-                        fg_c = cpra[0].replace("chr","").replace("X","23").replace("Y","24").replace("M","25").replace("MT","25")
-                        gd_c = "chr" + cpra[0].replace("chr","").replace("23","X").replace("24","Y").replace("25","M")
+                        fg_c = cpra[0].replace("chr","").replace("X","23").replace("Y","24").replace("XY","25").replace("MT","26").replace("M","26")
                         #annotate
                         fg_iter = fg_tabix.fetch(fg_c,cpra[1]-1, cpra[1])
-                        fg_a = get_fg_annotation(fg_iter,variant, gene_idx,cons_idx,var_idx)
-
-                        #annotate
-                        gnomad_iter = gnomad_tabix.fetch(gd_c,cpra[1]-1, cpra[1])
-                        gd_a = get_gnomad_annotation(gnomad_iter,cpra,finaf_idx, nfeaf_idx, rsid_idx,gd_cpra)
+                        fg_a = get_fg_annotation(fg_iter,variant,gene_idx,cons_idx,rsid_idx,exome_enr_idx,genome_enr_idx,var_idx)
 
                         line_columns.extend([
-                            gd_a.finaf,
-                            gd_a.nfeaf,
-                            gd_a.rsid,
+                            fg_a.rsid,
                             fg_a.gene,
                             fg_a.consequence,
+                            fg_a.EXOME_enrichment_nfsee,
+                            fg_a.GENOME_enrichment_nfee,
+                            pheno,
                         ])
                         #gather row
                         #write to file
@@ -475,10 +438,6 @@ task summary{
 
                         #coding out
                         if pvalue < coding_threshold and fg_a.consequence in coding_groups:
-                            line_columns.extend([
-                                gd_a.enrich,
-                                pheno
-                            ])
                             coding_outfile.write("\t".join(line_columns)+"\n")
         print("summary created")
         EOF

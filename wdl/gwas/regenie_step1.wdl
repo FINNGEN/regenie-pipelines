@@ -28,7 +28,6 @@ task step1 {
             for(i=1;i<=NF;i++) {h[$i]=i;};
             split(phenocols,ps, ",");
             prev="";
-            is_single=1;
             for(pi in ps) {
               if(!(ps[pi] in h)) {
                  print "Given phenotype " ps[pi] " does not exist in phenofile" > "/dev/stderr"; exit 1;
@@ -187,7 +186,7 @@ task step1 {
 
         docker: "${docker}"
         cpu: if length(phenolist) == 1 then 1 else if length(phenolist) <=10 then 2 else 4
-        memory: if length(phenolist) == 1 then "10 GB" else "12 GB"
+        memory: if length(phenolist) == 1 then "12 GB" else "16 GB"
         disks: "local-disk 200 HDD"
         zones: "europe-west1-b europe-west1-c europe-west1-d"
         preemptible: 2
