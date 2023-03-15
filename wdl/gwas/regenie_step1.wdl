@@ -19,7 +19,7 @@ task step1 {
 
     command <<<
 
-        # set -euxo pipefail
+        set -eux
 
         n_cpu=`grep -c ^processor /proc/cpuinfo`
         is_single_sex=$(zcat ${cov_pheno} | awk -v sexcol=${sex_col_name} -v phenocols=${sep="," phenolist} \
@@ -44,23 +44,23 @@ task step1 {
                prev=$h[sexcol];
              }
             }
-         }
-         END { print "is single ", is_single > "/dev/stderr"; printf is_single }'
+          }
+          END { print "is single ", is_single > "/dev/stderr"; printf is_single }'
         )
 
-      if [[ $is_single_sex -eq 1 ]]
-      then
-        echo "true" > is_single_sex
-      else
-        echo "false" > is_single_sex
-      fi
+        if [[ $is_single_sex -eq 1 ]]
+        then
+            echo "true" > is_single_sex
+        else
+            echo "false" > is_single_sex
+        fi
 
-       if [[ "${auto_remove_sex_covar}" == "true" && "$is_single_sex" == "1" ]];
-       then
-          covars=$(echo ${covariates} | sed -e 's/${sex_col_name}//' | sed 's/^,//' | sed -e 's/,$//' | sed 's/,,/,/g')
-       else
-          covars=${covariates}
-       fi
+        if [[ "${auto_remove_sex_covar}" == "true" && "$is_single_sex" == "1" ]];
+        then
+            covars=$(echo ${covariates} | sed -e 's/${sex_col_name}//' | sed 's/^,//' | sed -e 's/,$//' | sed 's/,,/,/g')
+        else
+            covars=${covariates}
+        fi
 
 
         #filter out covariates with too few observations
@@ -73,7 +73,7 @@ task step1 {
         # If a binary covariate has value NA, it will not be counted towards 0 or 1 for that covariate.
         # If a covariate does not seem to exist (e.g. PC{1:10}), it will be passed through.
         # If any of the phenotypes is not NA on that row, that row will be counted. This is in line with the step1 mean-imputation for multiple phenotypes.
-        zcat $COVARFILE |awk -v covariates=$covars  -v phenos=$PHENO -v th=$THRESHOLD > new_covars  '
+        zcat $COVARFILE | awk -v covariates=$covars  -v phenos=$PHENO -v th=$THRESHOLD > new_covars  '
         BEGIN{FS="\t"}
         NR == 1 {
             covlen = split(covariates,covars,",")
@@ -179,7 +179,7 @@ task step1 {
         File firth_list = glob("*.firth.list")[0]
         String covars_used = read_string("new_covars")
         File covariatelist = "new_covars"
-        Boolean  is_single_sex = read_boolean("is_single_sex")
+        Boolean is_single_sex = read_boolean("is_single_sex")
     }
 
     runtime {
