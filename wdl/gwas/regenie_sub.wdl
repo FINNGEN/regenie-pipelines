@@ -318,7 +318,7 @@ task gather {
         docker: "${docker}"
         cpu: 1
         memory: "8 GB"
-        disks: "local-disk 200 HDD"
+        disks: "local-disk 20 HDD"
         zones: "europe-west1-b europe-west1-c europe-west1-d"
         preemptible: 2
         noAddress: true
@@ -453,7 +453,7 @@ task summary{
         docker: "${docker}"
         cpu: 1
         memory: "2 GB"
-        disks: "local-disk 200 HDD"
+        disks: "local-disk 60 HDD"
         zones: "europe-west1-b europe-west1-c europe-west1-d"
         preemptible: 2
     }
