@@ -91,7 +91,7 @@ task step1 {
         END{
         if (!err) {
         for (pk in phenos){
-        printf "{\"phenotype\":%s,\"cases\":%d,\"controls\":%d}",phenos[pk],vals[phenos[pk]"1"],vals[phenos[pk]"0"] > phenos[pk]"_cases_controls.json"
+        printf "{\"phenotype\":\"%s\",\"cases\":%d,\"controls\":%d}",phenos[pk],vals[phenos[pk]"1"],vals[phenos[pk]"0"] > phenos[pk]"_cases_controls.json"
         }
         }
         }
