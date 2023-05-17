@@ -91,8 +91,14 @@ task step2 {
 
           for p in ${sep=" " phenolist}; do
 
-            N_cases_females=$(awk -v pheno=$p 'FNR==NR { females[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in females {print $1}' females <(zcat ${cov_pheno}) | wc -l)
-            N_cases_males=$(awk -v pheno=$p 'FNR==NR { males[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in males {print $1}' males <(zcat ${cov_pheno}) | wc -l)
+            if [[ "${is_binary}" == "true" ]];
+            then
+                N_cases_females=$(awk -v pheno=$p 'FNR==NR { females[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in females {print $1}' females <(zcat ${cov_pheno}) | wc -l)
+                N_cases_males=$(awk -v pheno=$p 'FNR==NR { males[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in males {print $1}' males <(zcat ${cov_pheno}) | wc -l)
+            else 
+                N_cases_females=$(awk -v pheno=$p 'FNR==NR { females[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]!="NA" && $1 in females {print $1}' females <(zcat ${cov_pheno}) | wc -l)
+                N_cases_males=$(awk -v pheno=$p 'FNR==NR { males[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]!="NA" && $1 in males {print $1}' males <(zcat ${cov_pheno}) | wc -l)
+            fi 
 
             echo "Female cases: "$N_cases_females
             echo "Male cases: "$N_cases_males
@@ -122,11 +128,22 @@ task step2 {
               ## NOTE
               ## NOTE: Echoing annoyingly the expected header here so that in gather the header can be taken from the first shard.
               ## NOTE This must match whats written from python below
-              echo -n "CHROM GENPOS ID ALLELE0 ALLELE1 A1FREQ A1FREQ_CASES A1FREQ_CONTROLS INFO N TEST BETA SE CHISQ LOG10P"\
-              "males_ID males_A1FREQ_CASES males_A1FREQ_CONTROLS males_N males_BETA males_SE males_LOG10P"\
-              "females_ID females_A1FREQ_CASES females_A1FREQ_CONTROLS females_N females_BETA females_SE females_LOG10P"\
-              "diff_beta p_diff" | bgzip > ${prefix}"."$p".sex_spec.gz"
-              continue
+            
+                if [[ "${is_binary}" == "true" ]];
+                then
+                     echo -n "CHROM GENPOS ID ALLELE0 ALLELE1 A1FREQ A1FREQ_CASES A1FREQ_CONTROLS INFO N TEST BETA SE CHISQ LOG10P"\
+                        " EXTRA males_ID males_A1FREQ_CASES males_A1FREQ_CONTROLS males_N males_BETA males_SE males_LOG10P"\
+                        " females_ID females_A1FREQ_CASES females_A1FREQ_CONTROLS females_N females_BETA females_SE females_LOG10P"\
+                        " diff_beta p_diff" | bgzip > ${prefix}"."$p".sex_spec.gz"
+                    continue
+                else 
+
+                     echo -n "CHROM GENPOS ID ALLELE0 ALLELE1 A1FREQ INFO N TEST BETA SE CHISQ LOG10P"\
+                        " EXTRA males_ID males_N males_BETA males_SE males_LOG10P"\
+                        " females_ID females_N females_BETA females_SE females_LOG10P"\
+                        " diff_beta p_diff" | bgzip > ${prefix}"."$p".sex_spec.gz"
+                    continue
+                fi 
             fi
 
             for s in males females;
@@ -183,19 +200,30 @@ female=prefix+".sex_spec.females_" + pheno + ".gz"
 ## NOTE:  See above where Echoing the expected header in case no sex specific results (above continue statement) and we want each shard to
 ## NOTE: have correct header so in gather step the first line of first file can serve as a header.
 ## NOTE: IF changing output columns in here, change the columns accordingly above.
-basic_cols = ["CHROM","GENPOS","ID","ALLELE0","ALLELE1","A1FREQ", "A1FREQ_CASES", "A1FREQ_CONTROLS", "INFO", "N", "TEST", "BETA","SE","CHISQ","LOG10P"]
-sex_cols = ["ID","A1FREQ_CASES","A1FREQ_CONTROLS","N","BETA","SE","LOG10P"]
 
-basic = pd.read_csv( gzip.open(base), sep=" ")[basic_cols]
+sex_cols = ["ID","N","BETA","SE","LOG10P"]
 
-malestat = pd.read_csv( gzip.open( male ), sep=" " )[sex_cols]
-femalestat = pd.read_csv( gzip.open(female), sep=" ")[sex_cols]
+basic = pd.read_csv( gzip.open(base), sep=" ")
+
+cols = list(basic.columns)
+
+binarycols = ["A1FREQ_CONTROLS","A1FREQ_CASES"] 
+
+malestat = pd.read_csv( gzip.open( male ), sep=" " )
+femalestat = pd.read_csv( gzip.open(female), sep=" ")
+
+if  all ( [ c in cols for c in binarycols ]):
+    ## add case control afs... 
+    sex_cols.extend(binarycols)
+    
+malestat = malestat[sex_cols]
+femalestat = femalestat[sex_cols]
+
 combs = basic.merge(malestat.add_prefix("males_"),
           left_on="ID",right_on="males_ID").merge(femalestat.add_prefix("females_"),left_on="ID", right_on="females_ID")
 
 combs["diff_beta"] = combs["males_BETA"]-combs["females_BETA"]
-print(combs)
-print(combs.dtypes)
+
 if(len(combs.index))>0:
   combs["p_diff"] = -((norm.logsf( abs(combs["diff_beta"])/( np.sqrt(combs["males_SE"]**2+combs["females_SE"]**2))) + math.log(2) ) / math.log(10))
 else:
