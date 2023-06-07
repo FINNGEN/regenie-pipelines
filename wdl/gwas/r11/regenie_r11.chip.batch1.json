@@ -1,0 +1,34 @@
+{
+    "regenie.sub_step1.docker": "eu.gcr.io/finngen-refinery-dev/regenie:2.2.4_FG_0.1.3",
+    "regenie.sub_step2.docker": "eu.gcr.io/finngen-refinery-dev/regenie:2.2.4_FG_0.1.3",
+
+    "regenie.phenolist": "gs://r11-data/chip/pheno/r11_phenos_batch1",
+    "regenie.is_binary": true,
+    "regenie.cov_pheno": "gs://r11-data/chip/R11_chip_COV_PHENO_V1.gz",
+    "regenie.covariates": "SEX_IMPUTED,AGE_AT_DEATH_OR_END_OF_FOLLOWUP,PC{1:10},BATCH_AxiomGT1_b01_V4,BATCH_AxiomGT1_b02_V4,BATCH_AxiomGT1_b03_V4,BATCH_AxiomGT1_b04_V4,BATCH_AxiomGT1_b05_V4,BATCH_AxiomGT1_b06_V4,BATCH_AxiomGT1_b07_V4,BATCH_AxiomGT1_b08_V4,BATCH_AxiomGT1_b09_V4,BATCH_AxiomGT1_b10_V4,BATCH_AxiomGT1_b100_V6,BATCH_AxiomGT1_b101_V6,BATCH_AxiomGT1_b11_V4,BATCH_AxiomGT1_b12_V4,BATCH_AxiomGT1_b13_V4,BATCH_AxiomGT1_b14_V4,BATCH_AxiomGT1_b15_V4,BATCH_AxiomGT1_b17_V4,BATCH_AxiomGT1_b18_V4,BATCH_AxiomGT1_b19_V4,BATCH_AxiomGT1_b20_V4,BATCH_AxiomGT1_b21_V4,BATCH_AxiomGT1_b22_V4,BATCH_AxiomGT1_b23_V4,BATCH_AxiomGT1_b24_V4,BATCH_AxiomGT1_b25_V4,BATCH_AxiomGT1_b26_V2P2,BATCH_AxiomGT1_b27_V2P2,BATCH_AxiomGT1_b28_V2P2,BATCH_AxiomGT1_b29_V2P2,BATCH_AxiomGT1_b30_V2P2,BATCH_AxiomGT1_b31_V2,BATCH_AxiomGT1_b3234_V2,BATCH_AxiomGT1_b33_V2,BATCH_AxiomGT1_b35_V2,BATCH_AxiomGT1_b36_V2,BATCH_AxiomGT1_b37_V2,BATCH_AxiomGT1_b38_V2,BATCH_AxiomGT1_b39_V2,BATCH_AxiomGT1_b40_V2,BATCH_AxiomGT1_b41_V2,BATCH_AxiomGT1_b42_V2,BATCH_AxiomGT1_b43_V2,BATCH_AxiomGT1_b44_V2,BATCH_AxiomGT1_b45_V2,BATCH_AxiomGT1_b46_V2,BATCH_AxiomGT1_b47_V2,BATCH_AxiomGT1_b48_V2,BATCH_AxiomGT1_b49_V2,BATCH_AxiomGT1_b50_V2,BATCH_AxiomGT1_b51_V2,BATCH_AxiomGT1_b52_V2,BATCH_AxiomGT1_b53_V3,BATCH_AxiomGT1_b54_V3,BATCH_AxiomGT1_b55_V3,BATCH_AxiomGT1_b56_V3,BATCH_AxiomGT1_b57_V3,BATCH_AxiomGT1_b58_V3,BATCH_AxiomGT1_b59_V3,BATCH_AxiomGT1_b60_V3,BATCH_AxiomGT1_b61_V3,BATCH_AxiomGT1_b62_V3,BATCH_AxiomGT1_b63_V3,BATCH_AxiomGT1_b64_V3,BATCH_AxiomGT1_b65_V6,BATCH_AxiomGT1_b66_V6,BATCH_AxiomGT1_b67_V6,BATCH_AxiomGT1_b68_V5,BATCH_AxiomGT1_b69_V6,BATCH_AxiomGT1_b70_V6,BATCH_AxiomGT1_b71_V5,BATCH_AxiomGT1_b72_V5,BATCH_AxiomGT1_b73_V5,BATCH_AxiomGT1_b74_V5,BATCH_AxiomGT1_b75_V5,BATCH_AxiomGT1_b76_V5,BATCH_AxiomGT1_b77_V5,BATCH_AxiomGT1_b78_V5,BATCH_AxiomGT1_b79_V5,BATCH_AxiomGT1_b80_V5,BATCH_AxiomGT1_b81_V5,BATCH_AxiomGT1_b82_V5,BATCH_AxiomGT1_b83_V5,BATCH_AxiomGT1_b84_V5,BATCH_AxiomGT1_b85_V5,BATCH_AxiomGT1_b86_V5,BATCH_AxiomGT1_b87_V5,BATCH_AxiomGT1_b88_V5,BATCH_AxiomGT1_b89_V5,BATCH_AxiomGT1_b90_V6,BATCH_AxiomGT1_b91_V6,BATCH_AxiomGT1_b92_V6,BATCH_AxiomGT1_b93_V6,BATCH_AxiomGT1_b94_V6,BATCH_AxiomGT1_b95_V6,BATCH_AxiomGT1_b96_V6,BATCH_AxiomGT1_b97_V6,BATCH_AxiomGT1_b98_V6,BATCH_AxiomGT1_b99_V6",
+
+    "regenie.auto_remove_sex_covar": true,
+    "regenie.sex_col_name": "SEX_IMPUTED",
+
+    "regenie.sub_step2.run_sex_specific": true,
+    "regenie.sub_step2.step2.sex_specific_logpval": 1.623249,
+
+    "regenie.sub_step1.step1.covariate_inclusion_threshold": 10,
+    "regenie.sub_step1.step1.grm_bed": "gs://r11-data/chip/grm/r11_chip_grm_LD0.2_geno0.03_maf_0.01.bed",
+    "regenie.sub_step1.step1.bsize": 1000,
+    "regenie.sub_step1.step1.options": "",
+
+    "regenie.sub_step2.bgenlist": "gs://r11-data/chip/bgen/r11_chip_bgen_chunk_loc",
+    "regenie.sub_step2.step2.test": "additive",
+    "regenie.sub_step2.step2.bsize": 400,
+    "regenie.sub_step2.step2.options": "--firth --approx --pThresh 0.01 --firth-se",
+
+    "regenie.sub_step2.gather.docker": "eu.gcr.io/finngen-refinery-dev/saige:0.39.1-fg",
+
+    "regenie.sub_step2.summary.docker": "eu.gcr.io/finngen-refinery-dev/saige:0.39.1-fg-pysam",
+    "regenie.sub_step2.summary.finngen_annotation": "gs://r11-data/chip/R11_annotated_variants_chip.tsv.gz",
+    "regenie.sub_step2.summary.summary_pval_thresh": 1e-6,
+    "regenie.sub_step2.summary.coding_pval_thresh": 1e-4,
+
+    "regenie.coding_gather.docker": "eu.gcr.io/finngen-refinery-dev/bioinformatics:0.8"
+}
