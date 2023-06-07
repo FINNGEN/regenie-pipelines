@@ -151,17 +151,21 @@ task step1 {
         awk '{sub(/_[0-9]+.loco.gz/, "."$1".loco.gz", $2)} 1' ${prefix}_pred.list > ${prefix}.$phenohash.pred.list
         loco_n=$(wc -l ${prefix}.$phenohash.pred.list|cut -d " " -f 1)
 
+        #check that loco predictions were created for every pheno
+        if [[ $loco_n -ne ${length(phenolist)} ]]; then
+            echo "The model did not converge. This job will abort."
+            exit 1
+        fi
+
         if [[ "${is_binary}" == "true" ]]
         then
             # rename firth files with phenotype names and update firth.list accordingly giving it a unique name
             awk '{orig=$2; sub(/_[0-9]+.firth.gz/, "."$1".firth.gz", $2); print "mv "orig" "$2} ' ${prefix}_firth.list | bash
-            phenohash=`echo ${sep="," phenolist} | md5sum | awk '{print $1}'`
             awk '{sub(/_[0-9]+.firth.gz/, "."$1".firth.gz", $2)} 1' ${prefix}_firth.list > ${prefix}.$phenohash.firth.list
 
-            #check that firth nulls were created
-            firth_n=$(wc -l ${prefix}.$phenohash.firth.list|cut -d " " -f 1)
             #check if there is a firth approx per every null
-            if [ "$loco_n" -ne "$firth_n" ]; then
+            firth_n=$(wc -l ${prefix}.$phenohash.firth.list|cut -d " " -f 1)
+            if [[ $loco_n -ne $firth_n ]]; then
                 echo "fitting firth null approximations FAILED. This job will abort."
                 exit 1
             fi
