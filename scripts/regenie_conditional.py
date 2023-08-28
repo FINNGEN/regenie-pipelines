@@ -78,7 +78,7 @@ def parse_sumstat_data(sumstats,pval_dict_file,column_names = ['#chrom','pos','m
     """
     Reads in sumstats as dictionary for relevant fields.
     """
-    sum_dict = dd(lambda : dd(float))
+    sum_dict = dd(lambda : dd(lambda : "0"))
 
     print(pval_dict_file)
     if not os.path.isfile(pval_dict_file):
@@ -100,9 +100,13 @@ def parse_sumstat_data(sumstats,pval_dict_file,column_names = ['#chrom','pos','m
     else:
         logging.info('reading in json...')
         with open(pval_dict_file) as json_file:
-            sum_dict = json.load(json_file)
+            tmp_dict = json.load(json_file)
+        for variant in tmp_dict:
+            for field in tmp_dict[variant]:
+                sum_dict[variant][field] = tmp_dict[variant][field]
         logging.info('done.')
     logging.info(f"{len(sum_dict)} original variants in sumstats")
+    
     return sum_dict
 
 def check_hit(out_file,step,threshold=7):
