@@ -113,7 +113,7 @@ workflow conditional_analysis {
     output{
         String sql_import_file = select_first([pheweb_import_munge.csv_sql,"None"])
         String independent_snps = select_first([cg_merge_results.pheno_independent_snps,"None"])
-        Array[String] conditional_data = select_first([regenie_outputs,[]])
+        Array[String] conditional_data = select_first([pheweb_import_munge.munged_regenie,[]])
         Boolean had_results = region_selection.had_results
     }
 }
@@ -263,11 +263,11 @@ task pheweb_import_munge{
     
     release = '~{release}'
     prefix = '~{prefix}'
-    out_dir = "."
+    out_dir = ".fixed/"
     region_file = '~{regions}'
     hits = '~{write_lines(cond_locus_hits)}'
-
-    out_file = os.path.join(out_dir,f"{prefix}_sql.merged.txt")
+    os.makedirs(out_dir,exist_ok=True)
+    out_file = f"~{out_file}"
     #reads in all paths
     with open(hits) as f:hits_paths = [elem.strip() for elem in f.readlines()]
     #loop over region data, find matching file(s), merge info and build sql table
@@ -321,7 +321,7 @@ task pheweb_import_munge{
   >>>
   output {
     File csv_sql = out_file
-    Array[File] munged_regenie = glob("./finngen*conditional")
+    Array[File] munged_regenie = glob(".fixed/*conditional")
   }
   
   runtime {
