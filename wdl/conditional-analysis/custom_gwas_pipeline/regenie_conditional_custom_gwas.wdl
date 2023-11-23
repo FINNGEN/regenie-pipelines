@@ -22,92 +22,96 @@ workflow conditional_analysis {
         File pheno_file
         File sumstats
         File null
-        Int threshold_cov_count
+
 
     }
-    String proper_covars = sub(covariates,"PC\\{1:10\\}","PC1,PC2,PC3,PC4,PC5,PC6,PC7,PC8,PC9,PC10")
     String prefix = "CUSTOM_GWAS"
 
     
     call join_pheno_cov{
-        input:pheno=phenotype,
-        pheno_file=pheno_file,
-        cov_file=cov_file,
-        docker=docker
+      input:pheno=phenotype,
+      pheno_file=pheno_file,
+      cov_file=cov_file,
+      docker=docker
     }
+    
+  
     call region_selection{
-        input: pheno=phenotype, 
-        sumstats=sumstats, 
-        chromosome_col=chr_col,
-        position_col=pos_col,
-        allele1_col=ref_col,
-        allele2_col=alt_col,
-        p_col=pval_col,
-        freq_col="af_alt",
-        se_col="sebeta",
-        beta_col="beta"
-
+      input:
+      pheno=phenotype, 
+      sumstats=sumstats, 
+      chromosome_col=chr_col,
+      position_col=pos_col,
+      allele1_col=ref_col,
+      allele2_col=alt_col,
+      p_col=pval_col,
+      freq_col="af_alt",
+      se_col="sebeta",
+      beta_col="beta"
+      
     }
+    
     if(region_selection.had_results){
         call extract_cond_regions {
-        input: pheno=phenotype,
-        region = region_selection.bed,
-        mlogp_threshold = locus_mlogp_threshold,
-        docker=docker,
-        mlogp_col = mlogp_col,
-        chr_col=chr_col,
-        pos_col = pos_col,
-        ref_col=ref_col,
-        alt_col=alt_col,
-        chroms=chroms,
-        sumstats=sumstats
-    }
+          input:
+	  pheno=phenotype,
+          region = region_selection.bed,
+          mlogp_threshold = locus_mlogp_threshold,
+          docker=docker,
+          mlogp_col = mlogp_col,
+          chr_col=chr_col,
+          pos_col = pos_col,
+          ref_col=ref_col,
+          alt_col=alt_col,
+          chroms=chroms,
+          sumstats=sumstats
+	}
+		
+	Array[Array[String]] all_regions = read_tsv(extract_cond_regions.gw_sig_res)
+	
+	# loop over all regions running one variant per shard
+	String final_covariates  = sub(covariates,"PC\\{1:10\\}","PC1,PC2,PC3,PC4,PC5,PC6,PC7,PC8,PC9,PC10")
+	scatter (region in all_regions) {
+          String npheno = region[0]
+          String chrom = region[1]
+          String locus_region = region[2] + " " + region[3]
+	  call regenie_conditional {
+            input: docker = docker,
+            prefix=prefix,
+            locus_region=locus_region,
+            pheno=npheno,
+            chrom=chrom,
+            covariates = final_covariates,
+            mlogp_col = mlogp_col,
+            chr_col=chr_col,
+            pos_col = pos_col,
+            ref_col=ref_col,
+            alt_col=alt_col,
+            pval_threshold=conditioning_mlogp_threshold,
+            sumstats=sumstats,
+            pheno_file=join_pheno_cov.joined_cov_pheno,
+            null=null
+	    }    
+	  }
 
-
-
-    Array[Array[String]] all_regions = read_tsv(extract_cond_regions.gw_sig_res)
-
-    # loop over all regions running one variant per shard
-    scatter (region in all_regions) {
-        String npheno = region[0]
-        String chrom = region[1]
-        String locus_region = region[2] + " " + region[3]
-    call regenie_conditional {
-        input: docker = docker,
-        prefix=prefix,
-        locus_region=locus_region,
-        pheno=npheno,
-        chrom=chrom,
-        covariates = proper_covars,
-        mlogp_col = mlogp_col,
-        chr_col=chr_col,
-        pos_col = pos_col,
-        ref_col=ref_col,
-        alt_col=alt_col,
-        pval_threshold=conditioning_mlogp_threshold,
-        sumstats=sumstats,
-        pheno_file=join_pheno_cov.joined_cov_pheno,
-        null=null
-    }    
-    }
-
-    Array[File] results = flatten(regenie_conditional.conditional_chains)
-    #There is no reason for a complicated task, since what it does is join the pheno-specific regenion files together.
+	  Array[File] results = flatten(regenie_conditional.conditional_chains)
+	  #There is no reason for a complicated task, since what it does is join the pheno-specific regenion files together.
     # I am joining all files together, so it's the same 
-    call cg_merge_results{input:docker=docker,files = results,phenotype=phenotype}
-
-    #merges all regions into single file
-    Array[File] regenie_outputs = flatten(regenie_conditional.regenie_output)
-    call pheweb_import_munge{
-        input:docker=docker,
-        prefix=prefix,
-        release=release,
-        pheno=phenotype,
-        cond_locus_hits=results,
-        regions=extract_cond_regions.gw_sig_res,
-        regenie_outputs=regenie_outputs
-    }
-    }
+	  call cg_merge_results{input:docker=docker,files = results,phenotype=phenotype}
+	  
+	  #merges all regions into single file
+	  Array[File] regenie_outputs = flatten(regenie_conditional.regenie_output)
+	  call pheweb_import_munge{
+            input:
+	    docker=docker,
+            prefix=prefix,
+            release=release,
+            pheno=phenotype,
+            cond_locus_hits=results,
+            regions=extract_cond_regions.gw_sig_res,
+            regenie_outputs=regenie_outputs
+	  }
+	}
     
 
     output{
@@ -501,85 +505,6 @@ task regenie_conditional {
   
 }
 
-
-task filter_covariates {
-
-  input {
-    File pheno_file
-    Array[String] covariates
-    File pheno_list
-    String docker
-    Int threshold_cov_count
-    }
-
-    String outfile = "./pheno_cov_map_" + threshold_cov_count + ".txt"
-    Int disk_size = ceil(size(pheno_file,'GB')) + 2 * 2
-    
-    command <<<
-
-      set -euxo pipefail
-      
-      python3 <<CODE
-      
-      import pandas as pd
-      import numpy as np
-      
-      #read in phenos as list of phenos regardless
-      tot_phenos = []
-      phenos_groups = []
-      with open('~{pheno_list}') as i:
-          for line in i:
-              phenos = line.strip().split()
-              phenos_groups.append(phenos)
-              tot_phenos += phenos    
-
-      #read in phenos mapping all valid entries to 1 and NAs to 0
-      pheno_df= pd.read_csv('~{pheno_file}',sep='\t',usecols=tot_phenos).notna().astype(int)
-      print(pheno_df)
-      # read in covariates getting absolute values (handles PCs)
-      covariates= '~{sep="," covariates}'.split(',')
-      cov_df= pd.read_csv('~{pheno_file}',sep='\t',usecols=covariates).abs()
-      print(cov_df)
-
-      # now for each pheno calculate product of each covariate with itself
-      
-      with open('~{outfile}','wt') as o,open('~{outfile}'.replace('.txt','.err.txt'),'wt') as tmp_err:
-          for i,pheno_list in enumerate(phenos_groups):
-              pheno_name = ','.join(pheno_list)
-              # for each group of phenos (possibly a single one) multiply all covs and pheno column and count how many non 0 entries are there: this means that the entry has a valid pheno and a non null covariates.
-              df = pd.DataFrame()
-              for pheno in pheno_list:
-                  m = (cov_df.mul(pheno_df[pheno],0)>0).sum().to_frame(pheno)
-                  df = pd.concat([df,m],axis =1)
-
-              print(f"{i+1}/{len(phenos_groups)} {pheno_name}")
-              #If it's a group of phenos the min function will return the lowest count across all phenos
-              tmp_df = df[pheno_list].min(axis =1)
-              covs = tmp_df.index[tmp_df >= ~{threshold_cov_count}].tolist()
-              missing_covs = [elem for elem in covariates if elem not in covs]
-              if missing_covs:tmp_err.write(f"{pheno_name}\t{','.join(missing_covs)}\n")
-              o.write(f"{pheno_name}\t{','.join(covs)}\n")
-      
-      CODE
-
-    >>>
-      output {
-	File cov_pheno_map = outfile
-	File cov_pheno_warning = sub(outfile,'.txt','.err.txt')
-      }
-  
-  runtime {
-    cpu: "1"
-    docker: "${docker}"
-    memory: "64 GB"
-    disks: "local-disk ${disk_size} HDD"
-    zones: "europe-west1-b europe-west1-c europe-west1-d"
-    preemptible: "1"
-  }
-
-}
-
-  
 task extract_cond_regions {
   
   input {
@@ -593,7 +518,6 @@ task extract_cond_regions {
     String alt_col
     String mlogp_col
     Array[String] chroms 
-
     String docker
     Float mlogp_threshold
 

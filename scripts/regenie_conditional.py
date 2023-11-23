@@ -74,24 +74,26 @@ def regenie_run(args,step,bgen,sample_file,pheno_file,covariates,condition_list,
         
     return out_file,ret
 
-def parse_sumstat_data(sumstats,pval_dict_file,column_names = ['#chrom','pos','mlogp','ref','alt','beta','sebeta']):
+def parse_data(sumstats,pval_dict_file,column_names = ['#chrom','pos','mlogp','ref','alt','beta','sebeta']):
     """
     Reads in sumstats as dictionary for relevant fields.
     """
-    sum_dict = dd(lambda : dd(float))
+    sum_dict = dd(lambda : dd(lambda : "0"))
 
     print(pval_dict_file)
     if not os.path.isfile(pval_dict_file):
         logging.info("reading original pvals..")
-        
-        header =return_header(sumstats)
-        columns = [header.index(elem) for elem in column_names]
-        it = basic_iterator(sumstats,skiprows=1,columns = columns)
-        for elem in it:
-            chrom,pos,mlogp,ref,alt,beta,sebeta = elem
-            variant ="chr" + '_'.join([inv_sub_dict[chrom],pos,ref,alt])
-            for key in ["beta","sebeta","mlogp"]:
-                sum_dict[variant][key] = eval(key)
+
+        col_names = ['chrom','pos', 'mlogp', 'ref', 'alt', 'beta', 'sebeta']
+        # read in and rename
+        df = pd.read_csv(args.sumstats,usecols = column_names,sep ='\t',dtype=str).rename(columns=dict(zip(column_names,col_names)))
+        # add variant name and make it index
+        df['snpid'] = "chr" + df.chrom + "_" + df.pos + "_" + df.ref + "_" + df.alt
+        df = df.set_index("snpid")
+        # flip it so i can build dict based on variants
+        df = df.T
+        for elem in df:
+            sum_dict[elem] = df[elem].to_dict()
             
         logging.info(f"dumping pvals..{pval_dict_file} {len(sum_dict)}")
         with open(pval_dict_file, 'wt') as fp:
@@ -100,16 +102,20 @@ def parse_sumstat_data(sumstats,pval_dict_file,column_names = ['#chrom','pos','m
     else:
         logging.info('reading in json...')
         with open(pval_dict_file) as json_file:
-            sum_dict = json.load(json_file)
+            tmp_dict = json.load(json_file)
+        for variant in tmp_dict:
+            for field in tmp_dict[variant]:
+                sum_dict[variant][field] = tmp_dict[variant][field]
         logging.info('done.')
     logging.info(f"{len(sum_dict)} original variants in sumstats")
     return sum_dict
+
+
 
 def check_hit(out_file,step,threshold=7):
     """
     Checks if regenie hit is significant. 
     """
-
     # read results as pandas df and get row with max -log10(p)
     df = pd.read_csv(out_file,sep=" ")
     # get max value,extract relevant fields and map to str
@@ -225,7 +231,7 @@ if __name__ == '__main__':
     # gets original sumstats data for variants
     pval_dict_file = os.path.join(args.tmp_dir,f"{args.pheno}_pvals.json")
     columns= [args.chr_col,args.pos_col,args.mlogp_col,args.ref_col,args.alt_col,args.beta_col,args.sebeta_col]
-    sum_dict = parse_sumstat_data(args.sumstats,pval_dict_file,columns)
+    sum_dict = parse_data(args.sumstats,pval_dict_file,columns)
 
     # formatting of args for regenie
     if args.locus_region:  region_list  = [check_region(*args.locus_region)]
@@ -241,6 +247,7 @@ if __name__ == '__main__':
     # create tmp pheno file (lighter)
     tmp_pheno_file = filter_pheno(args) 
     for locus,region in region_list:
+        print(sum_dict[locus])
         main(locus,region,args,tmp_pheno_file,sum_dict,args.threads)
                 
     

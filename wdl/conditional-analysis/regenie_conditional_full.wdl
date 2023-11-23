@@ -6,7 +6,7 @@ workflow conditional_analysis {
     String docker
     File phenos_to_cond
     String release
-    
+    Boolean test
     String mlogp_col
     String chr_col
     String pos_col
@@ -34,7 +34,7 @@ workflow conditional_analysis {
    }
 
    #SINGLE JOB PER LOCUS VERSION
-   call merge_regions {input: docker =docker,hits=extract_cond_regions.gw_sig_res}
+   call merge_regions {input: docker =docker,hits=extract_cond_regions.gw_sig_res,test=test}
 
    Map[String,String] cov_map = read_map(filter_covariates.cov_pheno_map)
    Array[Array[String]] all_regions = read_tsv(merge_regions.regions)
@@ -43,9 +43,10 @@ workflow conditional_analysis {
    scatter (region in all_regions) {
      String pheno = region[0]
      String chrom = region[1]
-     String locus_region = region[2] + " " + region[3]
+     String region_limits = region[2] 
+     String locus = region[3]
     call regenie_conditional {
-       input: docker = docker, prefix=prefix,locus_region=locus_region,pheno=pheno,chrom=chrom,covariates = cov_map[pheno],mlogp_col = mlogp_col,chr_col=chr_col,pos_col = pos_col,ref_col=ref_col,alt_col=alt_col,pval_threshold=conditioning_mlogp_threshold,sumstats_root=sumstats_root,pheno_file=pheno_file
+       input: docker = docker, prefix=prefix,locus=locus,region=region_limits,pheno=pheno,chrom=chrom,covariates = cov_map[pheno],mlogp_col = mlogp_col,chr_col=chr_col,pos_col = pos_col,ref_col=ref_col,alt_col=alt_col,pval_threshold=conditioning_mlogp_threshold,sumstats_root=sumstats_root,pheno_file=pheno_file
      }    
    }
 
@@ -150,6 +151,7 @@ task pheweb_import_munge{
   
 
 }
+
 task merge_results {
 
   input {
@@ -205,7 +207,8 @@ task regenie_conditional {
     String docker
     String prefix
     # hit info
-    String locus_region
+    String locus
+    String region
     String pheno
     String chrom
     # files to localize 
@@ -246,12 +249,12 @@ task regenie_conditional {
   command <<<
     
     echo ~{pheno} ~{chrom} ~{cpus} 
-    tabix -h ~{sumstats}  ~{chrom} > region_sumstats.txt
+    tabix -h ~{sumstats}  ~{region} > region_sumstats.txt
 
     python3 /scripts/regenie_conditional.py \
     --out ./~{prefix}  --bgen ~{bgen}  --null-file ~{null}  --sumstats region_sumstats.txt \
     --pheno-file ~{pheno_file} --pheno ~{pheno} \
-    --locus-region ~{locus_region}  --pval-threshold ~{pval_threshold} --max-steps ~{max_steps} \
+    --locus-region ~{locus} ~{region}  --pval-threshold ~{pval_threshold} --max-steps ~{max_steps} \
     --chr-col ~{chr_col} --pos-col ~{pos_col} --ref-col ~{ref_col} --alt-col ~{alt_col} --mlogp-col ~{mlogp_col} --beta-col ~{beta} --sebeta-col ~{sebeta} \
     --covariates ~{covariates} ~{if defined(regenie_params) then " --regenie-params " + regenie_params else ""} --log info
 
@@ -407,14 +410,15 @@ task merge_regions {
   input {
     Array[File] hits
     String docker
+    Boolean test
   }
-
+  
   String outfile = "regions.txt"
-
   command <<<
-    while read f; do cat $f >> ~{outfile}; done <~{write_lines(hits)}
+  while read f; do cat $f >> tmp.txt; done <  ~{write_lines(hits)}
+  cat tmp.txt ~{if test then " | shuf | head -n 10" else ""}) > ~{outfile}
   >>>
-
+  
   output {
     File regions = outfile
   }
