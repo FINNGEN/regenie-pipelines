@@ -68,8 +68,7 @@ task pheweb_import_munge{
     Array[File] regenie_outputs
   }
 
-  Int disk_size = ceil(size(cond_locus_hits,'GB')) + ceil(size(regenie_outputs,'GB')) + 10
-  
+  Int disk_size = ceil(size(cond_locus_hits[0],"MB")*length(cond_locus_hits)*2/1000 + size(regenie_outputs[0],"MB")*length(regenie_outputs)*2/1000 +10)
   String out_file = prefix + "_sql.merged.txt"
   command <<<
 
