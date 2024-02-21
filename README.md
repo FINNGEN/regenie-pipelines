@@ -206,22 +206,6 @@ This is the major task where the magic happens. For reference, the shards will t
 `regenie_params` are all the other flags to be passed to regenie.  
 `cpus` is self explanatory.
 
-### BGEN CONVERSION
+### PHEWEB IMPORT
 
-For regenie usage unfortunately, the standard release bgens do not work, as regenie expects chromosome names in the bgen to be without the `chr` prefix. For this reason there is a [wdl](wdl/conditional-analysis/bgen_convert.wdl) for it. 
-
-The task uses an annotation script from [another pipeline](https://github.com/FINNGEN/ConvertVCF/tree/bgen-chrom-annotation) edited for the purpose. Each chrom is split into smaller vcfs with an edited chr name. Then the chunks are converted to bgen and finally merged. The inputs of the json are:
-
-```
-{
-    "convert_bgen.chrom_convert.chromPath": "gs://finngen-production-library-red/finngen_R9/genotype_1.0/data/finngen_R9_chrCHROM.vcf.gz",
-    "convert_bgen.chrom_convert.disk_factor": 4,
-    "convert_bgen.docker": "eu.gcr.io/finngen-refinery-dev/convert_vcf:r8.annotate.bgen",
-    "convert_bgen.chrom_convert.bargs": "'  -filetype vcf -bgen-bits 8 -bgen-compression zlib -bgen-permitted-input-rounding-error 0.005 -ofiletype \"bgen_v1.2\" -vcf-genotype-field \"GP\" ' ",
-    "convert_bgen.chrom_convert.variants": "gs://finngen-production-library-red/finngen_R9/genotype_plink_1.0/data/finngen_R9.bim",
-    "convert_bgen.name": "finngen_R9_annotated",
-    "convert_bgen.chrom_list": ["1","2","3","4","5",'6','7','8','9','10','11','12','13','14','15','16','17','18','19','20',"21","22",'23'],
-
-}
-```
-They'are all quite self explanatory. These bgens can then be used as inputs for the main wdl.
+The last munging step has been problematic lately due to the number of files needed to be munged. For this scenario there is, if needed, a separated `pheweb_import.wdl` that reproduces the last step of the wdl by dealing with the files in chunks. The relevant inputs are the list of paths for conditional chains and regenie outputs that are part of the release anyways.

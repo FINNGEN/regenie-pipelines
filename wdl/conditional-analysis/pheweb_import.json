@@ -1,0 +1,8 @@
+{
+    "conditional_pheweb.docker": "eu.gcr.io/finngen-refinery-dev/regenie:3.1.1_r9_base",
+    "conditional_pheweb.release": "12",
+    "conditional_pheweb.pheweb_import_munge.regions": "gs://r12-data/regenie/conditional/inputs/pheweb/regions.txt",
+    "conditional_pheweb.split_inputs.outputs": "gs://r12-data/regenie/conditional/inputs/pheweb/r12_regenie_outputs.txt",
+    "conditional_pheweb.split_inputs.chains": "gs://r12-data/regenie/conditional/inputs/pheweb/r12_chains.txt",
+    "conditional_pheweb.split_inputs.chunks": 30,
+}
