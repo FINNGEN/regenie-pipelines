@@ -184,7 +184,8 @@ task step2 {
         chmod +x checkpoint.sh
         ## continue statement exits with 1.... switch to if statement below in case want to pipefail back
         ##set -euxo pipefail
-
+        bgenix -g ${bgen} -list |grep -Ev "^#" > variants.list
+        
         n_cpu=`grep -c ^processor /proc/cpuinfo`
 
         # create loco and firth lists
