@@ -28,40 +28,221 @@ task step2 {
     String DOLLAR="$"
 
     command <<<
-      ## continue statement exits with 1.... switch to if statement below in case want to pipefail back
+        # Check status of checkpoint with python script
+        cat << "__EOF__" > script.py
+        import sys
+        import glob
+        variant_file = sys.argv[1]
+        analysis_type = sys.argv[2].lower()
+        endpoints = sys.argv[3].split(",")
+        prefix= sys.argv[4]
+
+
+        NO_VARIANTS_MIN_VALUE=1000000000
+        NO_VARIANTS_MAX_VALUE=-1000000000
+        def read_processed_range(files):
+            """
+            Read in the processed range from files
+            Returns an optional tuple of chromosome, first position, last position
+            Returns a tuple of chromosome, first position, last position
+            """
+            chroms = []
+            pos_mins = []
+            pos_maxs = []
+            for fname in files:
+                chrom = ""
+                pos_min = NO_VARIANTS_MIN_VALUE
+                pos_max = NO_VARIANTS_MAX_VALUE
+                with open(fname,"r") as f:
+                    l = f.readline()
+                    c = l.strip().split(" ")
+                    # if header is malformed, then nothing is processed.
+                    if not ( (len(c) == 18 and analysis_type == "true") or (len(c)==14 and analysis_type == "false")):
+                        return None
+                    for line in f:
+                        c = line.strip().split(" ")
+                        #if line is malformed, break
+                        if not ( (len(c) == 18 and analysis_type == "true") or (len(c)==14 and analysis_type == "false")):
+                            break
+                        if chrom == "":
+                            chrom = c[0]
+                        pos = int(c[1])
+                        pos_min = min(pos,pos_min)
+                        pos_max = max(pos,pos_max)
+                pos_mins.append(pos_min)
+                pos_maxs.append(pos_max)
+                chroms.append(chrom)
+            pos_min = min(pos_mins)
+            pos_max = min(pos_maxs)
+            if not all([a == chroms[0] for a in chroms]):
+                #odd, all files don't have same chromosome
+                print("Not all files have same chromosome! This is very odd!",file=sys.stderr)
+            if pos_min != NO_VARIANTS_MIN_VALUE and pos_max != NO_VARIANTS_MAX_VALUE:
+                return (chroms[0],pos_min,pos_max)
+            return None
+            
+        def get_remaining_range(processed_range, all_variants_file)->str:
+            """
+            Get range still to be processed for files
+            Returns a tuple of chromosome, first position, last position
+            """
+            # read range in all variants file
+            chrom = ""
+            pos_min = NO_VARIANTS_MIN_VALUE
+            pos_max = NO_VARIANTS_MAX_VALUE
+            with open(all_variants_file,"r") as f:
+                _ = f.readline()
+                for line in f:
+                    c = line.strip().split("\t")
+                    if chrom == "":
+                        chrom = c[2].replace("chr","")
+                    pos = int(c[3])
+                    pos_min = min(pos,pos_min)
+                    pos_max = max(pos,pos_max)
+            #the processed range always should start from the beginning of the all variants range
+            #if processed range is chr1:a-b, and complete range is chr1:a-c, where b < c, then the remaining range is chr1:b-c
+            #we will want to be inclusive (i.e. b as start instead of b+1), since it is possible that there might be e.g. a multiallelic variant
+            # and only one or part of its variants were included.
+            return (chrom,processed_range[2],pos_max) 
+
+        complete_files = glob.glob("checkpoint_folder/*.regenie.gz")
+        incomplete_files = glob.glob("checkpoint_folder/*.regenie")
+        log = glob.glob(f"checkpoint_folder/{prefix}.log")
+        #check status of male and female endpoints
+        endpoints_run = all([any([f"{a}.regenie" in b for b in complete_files]) for a in endpoints]) and (len(log)==1)
+        if endpoints_run:
+            with open("phenos_done","w") as f:
+                f.write("True")
+        elif len(incomplete_files) != 0:
+            # get processed range
+            proc_range = read_processed_range(incomplete_files)
+            if proc_range != None:
+                remaining_range = get_remaining_range(proc_range,variant_file)
+                with open("remaining_range","w") as f:
+                    f.write(f"{remaining_range[0]}:{remaining_range[1]}-{remaining_range[2]}")
+                with open("processed_range","w") as f:
+                    f.write(f"{proc_range[0]}:{proc_range[1]}-{proc_range[2]}")
+        __EOF__
+
+        # combine outputs from possibly multiple preempted runs
+        cat << "__EOF__" > combine_outputs.py
+        import sys
+        import glob
+
+        glob_command = sys.argv[1]
+        output_name = sys.argv[2]
+        phenos = sys.argv[3].split(",")
+        files = glob.glob(glob_command)
+        #now, read all files into memory
+        data = []
+        headers = []
+        #do endpoints separately
+        for p in phenos:
+            files_ = [a for a in files if f"{p}.regenie" in a]
+            for fname in files_:
+                with open(fname,"r") as f:
+                    headers.append(f.readline().strip().split(" "))
+                    for l in f:
+                        data.append(l.strip().split(" "))
+            # check headers are the same
+            if not all([a == headers[0] for a in headers]):
+                print("NOT ALL HEADERS SAME!")
+                for i in len(headers):
+                    print(files_[i],header[i])
+                sys.exit(1)
+            header = headers[0]
+            # order data by chrom:pos:ref:alt
+            data2 = sorted(data,key=lambda x:(x[0],int(x[1])))
+            #make unique
+            data = []
+            dataset = set()
+            var = lambda x:(x[0],x[1],x[3],x[4])
+            for d in data2:
+                if var(d) in dataset:
+                    continue
+                else:
+                    dataset.add(var(d))
+                    data.append(d)
+            with open(f"{output_name}.{p}","w") as of:
+                of.write(" ".join(header)+"\n")
+                for l in data:
+                    of.write(" ".join(l)+"\n")
+        __EOF__
+
+
+        # write checkpointing script
+        cat << "__EOF__" > checkpoint.sh
+        #!/bin/bash
+        touch placeholder.regenie.placeholder placeholder.log
+        while [ 1 -eq 1 ];do
+            tar -cf checkpoint_new.tar *.regenie* *.log
+            cp checkpoint.tar checkpoint_old.tar
+            mv checkpoint_new.tar checkpoint.tar
+            sleep 60
+        done
+        __EOF__
+        chmod +x checkpoint.sh
+        ## continue statement exits with 1.... switch to if statement below in case want to pipefail back
         ##set -euxo pipefail
 
         n_cpu=`grep -c ^processor /proc/cpuinfo`
 
-        # move loco files to /cromwell_root as pred file paths point there
-        for file in ${sep=" " loco}; do
-            mv $file .
-        done
+        # create loco and firth lists
+        paste ${write_lines(phenos)} ${write_lines(nulls)} > firth_list
+        paste ${write_lines(phenos)} ${write_lines(loco)} > loco_list
 
-        # move null files to /cromwell_root as firth_list file paths point there
-        for file in ${sep=" " nulls}; do
-            mv $file .
-        done
-
-        regenie \
-        --step 2 \
-        ${test_cmd} \
-        ${if is_binary then "--bt --af-cc" else ""} \
-        --bgen ${bgen} \
-        --ref-first \
-        --sample ${sample} \
-        --covarFile ${cov_pheno} \
-        --covarColList ${covariates} \
-        --phenoFile ${cov_pheno} \
-        --phenoColList ${sep="," phenolist} \
-        --pred ${pred} \
-        ${if is_binary then "--use-null-firth ${firth_list}" else ""} \
-        --bsize ${bsize} \
-        --threads $n_cpu \
-        --gz \
-        --out ${prefix} \
-        ${options}
-
+        # start checkpointing script
+        ./checkpoint.sh &
+        CHECKPOINT_PID=$!
+        
+        # check if checkpoint file contains male regenie outputs
+        if test -f phenos_done; then
+            #copy files to here
+            cp checkpoint_folder/*.regenie.gz ./
+            cp checkpoint_folder/${prefix}.log ./
+        else 
+            # test if we have processed some range
+            if test -f remaining_range; then
+                #move all non-complete male regenie outputs to have the range that they
+                PROCESSED_RANGE=$(cat processed_range)
+                for f in checkpoint_folder/*.regenie;do
+                    cp $f $f.$PROCESSED_RANGE
+                done
+                #copy all files with any range from checkpoint folder to main folder
+                # this will fix the problem with one or more ranges missing when  
+                cp checkpoint_folder/*.regenie.* ./
+                cat checkpoint_folder/*.log* > ./${prefix}.log.$PROCESSED_RANGE
+                REMAINING_RANGE=$(cat remaining_range)
+                #we have, use the calculated remaining range 
+                RANGE_OPTION="--range "$REMAINING_RANGE
+                echo "Remaining range "$REMAINING_RANGE
+            fi
+            regenie \
+            --step 2 \
+            ${test_cmd} \
+            ${if is_binary then "--bt --af-cc" else ""} \
+            --bgen ${bgen} \
+            --ref-first \
+            --sample ${sample} \
+            --covarFile ${cov_pheno} \
+            --covarColList ${covariates} \
+            --phenoFile ${cov_pheno} \
+            --phenoColList ${sep="," phenolist} \
+            --pred loco_list \
+            ${if is_binary then "--use-null-firth firth_list" else ""} \
+            --bsize ${bsize} \
+            --threads $n_cpu \
+            --out ${prefix} \
+            $RANGE_OPTION \
+            ${options}
+            python3 combine_outputs.py "${prefix}*.regenie*" temp.regenie "${sep="," phenolist}"
+            for p in ${sep=" " phenolist};do
+                cat temp_males.regenie.$p |gzip >  ${prefix}"_"$p".regenie.gz"
+            done
+            #compress
+            tar -cf checkpoint.tar *.regenie.gz ${prefix}.log*
+        fi
+        
 
         if [[ "${run_sex_specific}" == "true" ]];
         then
@@ -255,6 +436,7 @@ combs.to_csv(prefix+"."+pheno+".sex_spec.gz", compression="gzip", sep=" ", index
         zones: "europe-west1-b europe-west1-c europe-west1-d"
         preemptible: 2
         noAddress: true
+        checkpointFile: "checkpoint.tar"
     }
 }
 
