@@ -28,341 +28,348 @@ task step2 {
     String DOLLAR="$"
 
     command <<<
-        # Check status of checkpoint with python script
-        cat << "__EOF__" > script.py
-        import sys
-        import glob
-        variant_file = sys.argv[1]
-        analysis_type = sys.argv[2].lower()
-        endpoints = sys.argv[3].split(",")
-        prefix= sys.argv[4]
+# Check status of checkpoint with python script
+cat << "__EOF__" > script.py
+import sys
+import glob
+variant_file = sys.argv[1]
+analysis_type = sys.argv[2].lower()
+endpoints = sys.argv[3].split(",")
+prefix= sys.argv[4]
 
 
-        NO_VARIANTS_MIN_VALUE=1000000000
-        NO_VARIANTS_MAX_VALUE=-1000000000
-        def read_processed_range(files):
-            """
-            Read in the processed range from files
-            Returns an optional tuple of chromosome, first position, last position
-            Returns a tuple of chromosome, first position, last position
-            """
-            chroms = []
-            pos_mins = []
-            pos_maxs = []
-            for fname in files:
-                chrom = ""
-                pos_min = NO_VARIANTS_MIN_VALUE
-                pos_max = NO_VARIANTS_MAX_VALUE
-                with open(fname,"r") as f:
-                    l = f.readline()
-                    c = l.strip().split(" ")
-                    # if header is malformed, then nothing is processed.
-                    if not ( (len(c) == 18 and analysis_type == "true") or (len(c)==14 and analysis_type == "false")):
-                        return None
-                    for line in f:
-                        c = line.strip().split(" ")
-                        #if line is malformed, break
-                        if not ( (len(c) == 18 and analysis_type == "true") or (len(c)==14 and analysis_type == "false")):
-                            break
-                        if chrom == "":
-                            chrom = c[0]
-                        pos = int(c[1])
-                        pos_min = min(pos,pos_min)
-                        pos_max = max(pos,pos_max)
-                pos_mins.append(pos_min)
-                pos_maxs.append(pos_max)
-                chroms.append(chrom)
-            pos_min = min(pos_mins)
-            pos_max = min(pos_maxs)
-            if not all([a == chroms[0] for a in chroms]):
-                #odd, all files don't have same chromosome
-                print("Not all files have same chromosome! This is very odd!",file=sys.stderr)
-            if pos_min != NO_VARIANTS_MIN_VALUE and pos_max != NO_VARIANTS_MAX_VALUE:
-                return (chroms[0],pos_min,pos_max)
-            return None
-            
-        def get_remaining_range(processed_range, all_variants_file)->str:
-            """
-            Get range still to be processed for files
-            Returns a tuple of chromosome, first position, last position
-            """
-            # read range in all variants file
-            chrom = ""
-            pos_min = NO_VARIANTS_MIN_VALUE
-            pos_max = NO_VARIANTS_MAX_VALUE
-            with open(all_variants_file,"r") as f:
-                _ = f.readline()
-                for line in f:
-                    c = line.strip().split("\t")
-                    if chrom == "":
-                        chrom = c[2].replace("chr","")
-                    pos = int(c[3])
-                    pos_min = min(pos,pos_min)
-                    pos_max = max(pos,pos_max)
-            #the processed range always should start from the beginning of the all variants range
-            #if processed range is chr1:a-b, and complete range is chr1:a-c, where b < c, then the remaining range is chr1:b-c
-            #we will want to be inclusive (i.e. b as start instead of b+1), since it is possible that there might be e.g. a multiallelic variant
-            # and only one or part of its variants were included.
-            return (chrom,processed_range[2],pos_max) 
+NO_VARIANTS_MIN_VALUE=1000000000
+NO_VARIANTS_MAX_VALUE=-1000000000
+def read_processed_range(files):
+    """
+    Read in the processed range from files
+    Returns an optional tuple of chromosome, first position, last position
+    Returns a tuple of chromosome, first position, last position
+    """
+    chroms = []
+    pos_mins = []
+    pos_maxs = []
+    for fname in files:
+        chrom = ""
+        pos_min = NO_VARIANTS_MIN_VALUE
+        pos_max = NO_VARIANTS_MAX_VALUE
+        with open(fname,"r") as f:
+            l = f.readline()
+            c = l.strip().split(" ")
+            # if header is malformed, then nothing is processed.
+            if not ( (len(c) == 18 and analysis_type == "true") or (len(c)==14 and analysis_type == "false")):
+                return None
+            for line in f:
+                c = line.strip().split(" ")
+                #if line is malformed, break
+                if not ( (len(c) == 18 and analysis_type == "true") or (len(c)==14 and analysis_type == "false")):
+                    break
+                if chrom == "":
+                    chrom = c[0]
+                pos = int(c[1])
+                pos_min = min(pos,pos_min)
+                pos_max = max(pos,pos_max)
+        pos_mins.append(pos_min)
+        pos_maxs.append(pos_max)
+        chroms.append(chrom)
+    pos_min = min(pos_mins)
+    pos_max = min(pos_maxs)
+    if not all([a == chroms[0] for a in chroms]):
+        #odd, all files don't have same chromosome
+        print("Not all files have same chromosome! This is very odd!",file=sys.stderr)
+    if pos_min != NO_VARIANTS_MIN_VALUE and pos_max != NO_VARIANTS_MAX_VALUE:
+        return (chroms[0],pos_min,pos_max)
+    return None
+    
+def get_remaining_range(processed_range, all_variants_file)->str:
+    """
+    Get range still to be processed for files
+    Returns a tuple of chromosome, first position, last position
+    """
+    # read range in all variants file
+    chrom = ""
+    pos_min = NO_VARIANTS_MIN_VALUE
+    pos_max = NO_VARIANTS_MAX_VALUE
+    with open(all_variants_file,"r") as f:
+        _ = f.readline()
+        for line in f:
+            c = line.strip().split("\t")
+            if chrom == "":
+                chrom = c[2].replace("chr","")
+            pos = int(c[3])
+            pos_min = min(pos,pos_min)
+            pos_max = max(pos,pos_max)
+    #the processed range always should start from the beginning of the all variants range
+    #if processed range is chr1:a-b, and complete range is chr1:a-c, where b < c, then the remaining range is chr1:b-c
+    #we will want to be inclusive (i.e. b as start instead of b+1), since it is possible that there might be e.g. a multiallelic variant
+    # and only one or part of its variants were included.
+    return (chrom,processed_range[2],pos_max) 
 
-        complete_files = glob.glob("checkpoint_folder/*.regenie.gz")
-        incomplete_files = glob.glob("checkpoint_folder/*.regenie")
-        log = glob.glob(f"checkpoint_folder/{prefix}.log")
-        #check status of male and female endpoints
-        endpoints_run = all([any([f"{a}.regenie" in b for b in complete_files]) for a in endpoints]) and (len(log)==1)
-        if endpoints_run:
-            with open("phenos_done","w") as f:
-                f.write("True")
-        elif len(incomplete_files) != 0:
-            # get processed range
-            proc_range = read_processed_range(incomplete_files)
-            if proc_range != None:
-                remaining_range = get_remaining_range(proc_range,variant_file)
-                with open("remaining_range","w") as f:
-                    f.write(f"{remaining_range[0]}:{remaining_range[1]}-{remaining_range[2]}")
-                with open("processed_range","w") as f:
-                    f.write(f"{proc_range[0]}:{proc_range[1]}-{proc_range[2]}")
-        __EOF__
+complete_files = glob.glob("checkpoint_folder/*.regenie.gz")
+incomplete_files = glob.glob("checkpoint_folder/*.regenie")
+log = glob.glob(f"checkpoint_folder/{prefix}.log")
+#check status of male and female endpoints
+endpoints_run = all([any([f"{a}.regenie" in b for b in complete_files]) for a in endpoints]) and (len(log)==1)
+if endpoints_run:
+    with open("phenos_done","w") as f:
+        f.write("True")
+elif len(incomplete_files) != 0:
+    # get processed range
+    proc_range = read_processed_range(incomplete_files)
+    if proc_range != None:
+        remaining_range = get_remaining_range(proc_range,variant_file)
+        with open("remaining_range","w") as f:
+            f.write(f"{remaining_range[0]}:{remaining_range[1]}-{remaining_range[2]}")
+        with open("processed_range","w") as f:
+            f.write(f"{proc_range[0]}:{proc_range[1]}-{proc_range[2]}")
+__EOF__
 
-        # combine outputs from possibly multiple preempted runs
-        cat << "__EOF__" > combine_outputs.py
-        import sys
-        import glob
+# combine outputs from possibly multiple preempted runs
+cat << "__EOF__" > combine_outputs.py
+import sys
+import glob
 
-        glob_command = sys.argv[1]
-        output_name = sys.argv[2]
-        phenos = sys.argv[3].split(",")
-        files = glob.glob(glob_command)
-        #now, read all files into memory
-        data = []
-        headers = []
-        #do endpoints separately
-        for p in phenos:
-            files_ = [a for a in files if f"{p}.regenie" in a]
-            for fname in files_:
-                with open(fname,"r") as f:
-                    headers.append(f.readline().strip().split(" "))
-                    for l in f:
-                        data.append(l.strip().split(" "))
-            # check headers are the same
-            if not all([a == headers[0] for a in headers]):
-                print("NOT ALL HEADERS SAME!")
-                for i in len(headers):
-                    print(files_[i],header[i])
-                sys.exit(1)
-            header = headers[0]
-            # order data by chrom:pos:ref:alt
-            data2 = sorted(data,key=lambda x:(x[0],int(x[1])))
-            #make unique
-            data = []
-            dataset = set()
-            var = lambda x:(x[0],x[1],x[3],x[4])
-            for d in data2:
-                if var(d) in dataset:
-                    continue
-                else:
-                    dataset.add(var(d))
-                    data.append(d)
-            with open(f"{output_name}.{p}","w") as of:
-                of.write(" ".join(header)+"\n")
-                for l in data:
-                    of.write(" ".join(l)+"\n")
-        __EOF__
+glob_command = sys.argv[1]
+output_name = sys.argv[2]
+phenos = sys.argv[3].split(",")
+files = glob.glob(glob_command)
+#now, read all files into memory
+data = []
+headers = []
+#do endpoints separately
+for p in phenos:
+    files_ = [a for a in files if f"{p}.regenie" in a]
+    for fname in files_:
+        with open(fname,"r") as f:
+            headers.append(f.readline().strip().split(" "))
+            for l in f:
+                data.append(l.strip().split(" "))
+    # check headers are the same
+    if not all([a == headers[0] for a in headers]):
+        print("NOT ALL HEADERS SAME!")
+        for i in len(headers):
+            print(files_[i],header[i])
+        sys.exit(1)
+    header = headers[0]
+    # order data by chrom:pos:ref:alt
+    data2 = sorted(data,key=lambda x:(x[0],int(x[1])))
+    #make unique
+    data = []
+    dataset = set()
+    var = lambda x:(x[0],x[1],x[3],x[4])
+    for d in data2:
+        if var(d) in dataset:
+            continue
+        else:
+            dataset.add(var(d))
+            data.append(d)
+    with open(f"{output_name}.{p}","w") as of:
+        of.write(" ".join(header)+"\n")
+        for l in data:
+            of.write(" ".join(l)+"\n")
+__EOF__
 
 
-        # write checkpointing script
-        cat << "__EOF__" > checkpoint.sh
-        #!/bin/bash
-        touch placeholder.regenie.placeholder placeholder.log
-        while [ 1 -eq 1 ];do
-            tar -cf checkpoint_new.tar *.regenie* *.log
-            cp checkpoint.tar checkpoint_old.tar
-            mv checkpoint_new.tar checkpoint.tar
-            sleep 60
+# write checkpointing script
+cat << "__EOF__" > checkpoint.sh
+#!/bin/bash
+touch placeholder.regenie.placeholder placeholder.log
+while [ 1 -eq 1 ];do
+    tar -cf checkpoint_new.tar *.regenie* *.log
+    cp checkpoint.tar checkpoint_old.tar
+    mv checkpoint_new.tar checkpoint.tar
+    sleep 60
+done
+__EOF__
+chmod +x checkpoint.sh
+## continue statement exits with 1.... switch to if statement below in case want to pipefail back
+##set -euxo pipefail
+bgenix -g ${bgen} -list |grep -Ev "^#" > variants.list
+
+mkdir checkpoint_folder
+if test -f checkpoint.tar;then
+    if tar -xf checkpoint.tar -C checkpoint_folder/; then
+        python3 script.py variants.list "${is_binary}" "${sep="," phenolist}" "${prefix}"
+    fi
+fi
+
+n_cpu=`grep -c ^processor /proc/cpuinfo`
+
+# create loco and firth lists
+paste ${write_lines(phenolist)} ${write_lines(nulls)} > firth_list
+paste ${write_lines(phenolist)} ${write_lines(loco)} > loco_list
+
+# start checkpointing script
+./checkpoint.sh &
+CHECKPOINT_PID=$!
+
+# check if checkpoint file contains male regenie outputs
+if test -f phenos_done; then
+    #copy files to here
+    cp checkpoint_folder/*.regenie.gz ./
+    cp checkpoint_folder/${prefix}.log ./
+else 
+    # test if we have processed some range
+    if test -f remaining_range; then
+        #move all non-complete male regenie outputs to have the range that they
+        PROCESSED_RANGE=$(cat processed_range)
+        for f in checkpoint_folder/*.regenie;do
+            cp $f $f.$PROCESSED_RANGE
         done
-        __EOF__
-        chmod +x checkpoint.sh
-        ## continue statement exits with 1.... switch to if statement below in case want to pipefail back
-        ##set -euxo pipefail
-        bgenix -g ${bgen} -list |grep -Ev "^#" > variants.list
-        
-        n_cpu=`grep -c ^processor /proc/cpuinfo`
+        #copy all files with any range from checkpoint folder to main folder
+        # this will fix the problem with one or more ranges missing when  
+        cp checkpoint_folder/*.regenie.* ./
+        cat checkpoint_folder/*.log* > ./${prefix}.log.$PROCESSED_RANGE
+        REMAINING_RANGE=$(cat remaining_range)
+        #we have, use the calculated remaining range 
+        RANGE_OPTION="--range "$REMAINING_RANGE
+        echo "Remaining range "$REMAINING_RANGE
+    fi
+    regenie \
+    --step 2 \
+    ${test_cmd} \
+    ${if is_binary then "--bt --af-cc" else ""} \
+    --bgen ${bgen} \
+    --ref-first \
+    --sample ${sample} \
+    --covarFile ${cov_pheno} \
+    --covarColList ${covariates} \
+    --phenoFile ${cov_pheno} \
+    --phenoColList ${sep="," phenolist} \
+    --pred loco_list \
+    ${if is_binary then "--use-null-firth firth_list" else ""} \
+    --bsize ${bsize} \
+    --threads $n_cpu \
+    --out ${prefix} \
+    $RANGE_OPTION \
+    ${options}
+    python3 combine_outputs.py "${prefix}*.regenie*" temp.regenie "${sep="," phenolist}"
+    for p in ${sep=" " phenolist};do
+        cat temp.regenie.$p |gzip >  ${prefix}"_"$p".regenie.gz"
+    done
+    #compress
+    tar -cf checkpoint.tar *.regenie.gz ${prefix}.log*
+fi
 
-        # create loco and firth lists
-        paste ${write_lines(phenos)} ${write_lines(nulls)} > firth_list
-        paste ${write_lines(phenos)} ${write_lines(loco)} > loco_list
 
-        # start checkpointing script
-        ./checkpoint.sh &
-        CHECKPOINT_PID=$!
-        
-        # check if checkpoint file contains male regenie outputs
-        if test -f phenos_done; then
-            #copy files to here
-            cp checkpoint_folder/*.regenie.gz ./
-            cp checkpoint_folder/${prefix}.log ./
-        else 
-            # test if we have processed some range
-            if test -f remaining_range; then
-                #move all non-complete male regenie outputs to have the range that they
-                PROCESSED_RANGE=$(cat processed_range)
-                for f in checkpoint_folder/*.regenie;do
-                    cp $f $f.$PROCESSED_RANGE
-                done
-                #copy all files with any range from checkpoint folder to main folder
-                # this will fix the problem with one or more ranges missing when  
-                cp checkpoint_folder/*.regenie.* ./
-                cat checkpoint_folder/*.log* > ./${prefix}.log.$PROCESSED_RANGE
-                REMAINING_RANGE=$(cat remaining_range)
-                #we have, use the calculated remaining range 
-                RANGE_OPTION="--range "$REMAINING_RANGE
-                echo "Remaining range "$REMAINING_RANGE
-            fi
-            regenie \
-            --step 2 \
-            ${test_cmd} \
-            ${if is_binary then "--bt --af-cc" else ""} \
-            --bgen ${bgen} \
-            --ref-first \
-            --sample ${sample} \
-            --covarFile ${cov_pheno} \
-            --covarColList ${covariates} \
-            --phenoFile ${cov_pheno} \
-            --phenoColList ${sep="," phenolist} \
-            --pred loco_list \
-            ${if is_binary then "--use-null-firth firth_list" else ""} \
-            --bsize ${bsize} \
-            --threads $n_cpu \
-            --out ${prefix} \
-            $RANGE_OPTION \
-            ${options}
-            python3 combine_outputs.py "${prefix}*.regenie*" temp.regenie "${sep="," phenolist}"
-            for p in ${sep=" " phenolist};do
-                cat temp_males.regenie.$p |gzip >  ${prefix}"_"$p".regenie.gz"
-            done
-            #compress
-            tar -cf checkpoint.tar *.regenie.gz ${prefix}.log*
-        fi
-        
-
-        if [[ "${run_sex_specific}" == "true" ]];
-        then
-          zcat ${cov_pheno} | awk 'NR==1{ for(i=1;i<=NF;i++) {h[$i]=i};
-                                             if(!("${sex_col_name}" in h)) {
-                                                print "Given sex column not found in phenotype file" > "/dev/stderr";
-                                                exit 1;
-                                              }
+if [[ "${run_sex_specific}" == "true" ]];
+then
+    zcat ${cov_pheno} | awk 'NR==1{ for(i=1;i<=NF;i++) {h[$i]=i};
+                                        if(!("${sex_col_name}" in h)) {
+                                        print "Given sex column not found in phenotype file" > "/dev/stderr";
+                                        exit 1;
                                         }
-                                  NR>1&&$h["${sex_col_name}"]==0{ print $1,$1}' > males
+                                }
+                            NR>1&&$h["${sex_col_name}"]==0{ print $1,$1}' > males
 
-          zcat ${cov_pheno} | awk 'NR==1{  for(i=1;i<=NF;i++) {h[$i]=i };
-                                          if(!("${sex_col_name}" in h))
-                                          {
-                                            print "Given sex column not found in phenotype file" > "/dev/stderr";
-                                            exit 1;
-                                          }
-                                       }
-                                  NR>1&&$h["${sex_col_name}"]==1{ print $1,$1}' > females
+    zcat ${cov_pheno} | awk 'NR==1{  for(i=1;i<=NF;i++) {h[$i]=i };
+                                    if(!("${sex_col_name}" in h))
+                                    {
+                                    print "Given sex column not found in phenotype file" > "/dev/stderr";
+                                    exit 1;
+                                    }
+                                }
+                            NR>1&&$h["${sex_col_name}"]==1{ print $1,$1}' > females
 
-          sex_covars=$(echo ${covariates} | sed -e 's/${sex_col_name}//' | sed 's/^,//' | sed -e 's/,$//' | sed 's/,,/,/g')
+    sex_covars=$(echo ${covariates} | sed -e 's/${sex_col_name}//' | sed 's/^,//' | sed -e 's/,$//' | sed 's/,,/,/g')
 
-          if [[ $sex_covars == ${covariates} ]];
-          then
-            echo "Warning! No sex covariate detected in used covariates."
-          fi
+    if [[ $sex_covars == ${covariates} ]];
+    then
+    echo "Warning! No sex covariate detected in used covariates."
+    fi
 
-          for p in ${sep=" " phenolist}; do
+    for p in ${sep=" " phenolist}; do
 
-            if [[ "${is_binary}" == "true" ]];
-            then
-                N_cases_females=$(awk -v pheno=$p 'FNR==NR { females[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in females {print $1}' females <(zcat ${cov_pheno}) | wc -l)
-                N_cases_males=$(awk -v pheno=$p 'FNR==NR { males[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in males {print $1}' males <(zcat ${cov_pheno}) | wc -l)
-            else 
-                N_cases_females=$(awk -v pheno=$p 'FNR==NR { females[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]!="NA" && $1 in females {print $1}' females <(zcat ${cov_pheno}) | wc -l)
-                N_cases_males=$(awk -v pheno=$p 'FNR==NR { males[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]!="NA" && $1 in males {print $1}' males <(zcat ${cov_pheno}) | wc -l)
-            fi 
+    if [[ "${is_binary}" == "true" ]];
+    then
+        N_cases_females=$(awk -v pheno=$p 'FNR==NR { females[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in females {print $1}' females <(zcat ${cov_pheno}) | wc -l)
+        N_cases_males=$(awk -v pheno=$p 'FNR==NR { males[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in males {print $1}' males <(zcat ${cov_pheno}) | wc -l)
+    else 
+        N_cases_females=$(awk -v pheno=$p 'FNR==NR { females[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]!="NA" && $1 in females {print $1}' females <(zcat ${cov_pheno}) | wc -l)
+        N_cases_males=$(awk -v pheno=$p 'FNR==NR { males[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]!="NA" && $1 in males {print $1}' males <(zcat ${cov_pheno}) | wc -l)
+    fi 
 
-            echo "Female cases: "$N_cases_females
-            echo "Male cases: "$N_cases_males
+    echo "Female cases: "$N_cases_females
+    echo "Male cases: "$N_cases_males
 
-            if [[ $N_cases_females -lt 10 ]] || [[ $N_cases_males -lt 10 ]];
-            then
-              echo "Less than 10 cases in a sex. Skipping testing of sex specific effects."
-              touch ${prefix}"NOT_DONE.sex_spec.gz"
-              continue
-            fi
+    if [[ $N_cases_females -lt 10 ]] || [[ $N_cases_males -lt 10 ]];
+    then
+        echo "Less than 10 cases in a sex. Skipping testing of sex specific effects."
+        touch ${prefix}"NOT_DONE.sex_spec.gz"
+        continue
+    fi
 
-            base=${prefix}"_"$p".regenie.gz"
+    base=${prefix}"_"$p".regenie.gz"
 
-            zcat $base | awk 'NR==1{ for(i=1;i<=NF;i++) { h[$i]=i };
-                                     if(!("ID" in h )||!("LOG10P" in h))
-                                     {
-                                       print "ID and LOG10P columns expected in association file" >"/dev/stderr"; exit 1}
-                                     }
-                             NR>1&&$h["LOG10P"]>${sex_specific_logpval} { print $h["ID"]} ' > $p".sex_variants"
+    zcat $base | awk 'NR==1{ for(i=1;i<=NF;i++) { h[$i]=i };
+                                if(!("ID" in h )||!("LOG10P" in h))
+                                {
+                                print "ID and LOG10P columns expected in association file" >"/dev/stderr"; exit 1}
+                                }
+                        NR>1&&$h["LOG10P"]>${sex_specific_logpval} { print $h["ID"]} ' > $p".sex_variants"
 
-            nvars=$(cat $p".sex_variants"| wc -l  )
+    nvars=$(cat $p".sex_variants"| wc -l  )
 
-            echo "$nvars variants will be tested for sex specific effects"
+    echo "$nvars variants will be tested for sex specific effects"
 
-            if [[ $nvars -lt 1 ]];
-            then
-              ## NOTE
-              ## NOTE: Echoing annoyingly the expected header here so that in gather the header can be taken from the first shard.
-              ## NOTE This must match whats written from python below
-            
-                if [[ "${is_binary}" == "true" ]];
-                then
-                     echo -n "CHROM GENPOS ID ALLELE0 ALLELE1 A1FREQ A1FREQ_CASES A1FREQ_CONTROLS INFO N TEST BETA SE CHISQ LOG10P"\
-                        " EXTRA males_ID males_A1FREQ_CASES males_A1FREQ_CONTROLS males_N males_BETA males_SE males_LOG10P"\
-                        " females_ID females_A1FREQ_CASES females_A1FREQ_CONTROLS females_N females_BETA females_SE females_LOG10P"\
-                        " diff_beta p_diff" | bgzip > ${prefix}"."$p".sex_spec.gz"
-                    continue
-                else 
+    if [[ $nvars -lt 1 ]];
+    then
+        ## NOTE
+        ## NOTE: Echoing annoyingly the expected header here so that in gather the header can be taken from the first shard.
+        ## NOTE This must match whats written from python below
+    
+        if [[ "${is_binary}" == "true" ]];
+        then
+                echo -n "CHROM GENPOS ID ALLELE0 ALLELE1 A1FREQ A1FREQ_CASES A1FREQ_CONTROLS INFO N TEST BETA SE CHISQ LOG10P"\
+                " EXTRA males_ID males_A1FREQ_CASES males_A1FREQ_CONTROLS males_N males_BETA males_SE males_LOG10P"\
+                " females_ID females_A1FREQ_CASES females_A1FREQ_CONTROLS females_N females_BETA females_SE females_LOG10P"\
+                " diff_beta p_diff" | bgzip > ${prefix}"."$p".sex_spec.gz"
+            continue
+        else 
 
-                     echo -n "CHROM GENPOS ID ALLELE0 ALLELE1 A1FREQ INFO N TEST BETA SE CHISQ LOG10P"\
-                        " EXTRA males_ID males_N males_BETA males_SE males_LOG10P"\
-                        " females_ID females_N females_BETA females_SE females_LOG10P"\
-                        " diff_beta p_diff" | bgzip > ${prefix}"."$p".sex_spec.gz"
-                    continue
-                fi 
-            fi
+                echo -n "CHROM GENPOS ID ALLELE0 ALLELE1 A1FREQ INFO N TEST BETA SE CHISQ LOG10P"\
+                " EXTRA males_ID males_N males_BETA males_SE males_LOG10P"\
+                " females_ID females_N females_BETA females_SE females_LOG10P"\
+                " diff_beta p_diff" | bgzip > ${prefix}"."$p".sex_spec.gz"
+            continue
+        fi 
+    fi
 
-            for s in males females;
-            do
-              echo "running $s analysis"
-              echo "$(wc -l $s) individuals in file"
-              head $s
+    for s in males females;
+    do
+        echo "running $s analysis"
+        echo "$(wc -l $s) individuals in file"
+        head $s
 
-              regenie \
-              --step 2 \
-              ${test_cmd} \
-              ${if is_binary then "--bt --af-cc" else ""} \
-              --bgen ${bgen} \
-              --ref-first \
-              --sample ${sample} \
-              --keep $s  \
-              --extract $p".sex_variants" \
-              --covarFile ${cov_pheno} \
-              --covarColList $sex_covars \
-              --phenoFile ${cov_pheno} \
-              --phenoColList $p \
-              --pred ${pred} \
-              --bsize ${bsize} \
-              --threads $n_cpu \
-              --gz \
-              --out ${prefix}".sex_spec."$s \
-              ${options}
-            done
+        regenie \
+        --step 2 \
+        ${test_cmd} \
+        ${if is_binary then "--bt --af-cc" else ""} \
+        --bgen ${bgen} \
+        --ref-first \
+        --sample ${sample} \
+        --keep $s  \
+        --extract $p".sex_variants" \
+        --covarFile ${cov_pheno} \
+        --covarColList $sex_covars \
+        --phenoFile ${cov_pheno} \
+        --phenoColList $p \
+        --pred ${pred} \
+        --bsize ${bsize} \
+        --threads $n_cpu \
+        --gz \
+        --out ${prefix}".sex_spec."$s \
+        ${options}
+    done
 
-            echo "all files"
-            ls *
+    echo "all files"
+    ls *
 
-            for f in $(ls *".sex_spec."*.regenie.gz ); do
-              to=${DOLLAR}{f/%.regenie.gz/.gz}
-              mv $f $to
-              echo "file" $to
-            done
+    for f in $(ls *".sex_spec."*.regenie.gz ); do
+        to=${DOLLAR}{f/%.regenie.gz/.gz}
+        mv $f $to
+        echo "file" $to
+    done
 
 echo '''import pandas as pd
 import gzip
@@ -414,12 +421,12 @@ else:
 combs.to_csv(prefix+"."+pheno+".sex_spec.gz", compression="gzip", sep=" ", index=False)
 
 ''' > source.py
-          python3 source.py $p ${prefix} ${prefix}"_"$p".regenie.gz"
-          done
-        else
-          ## sex specific analyses disabled but create the file so gather step is straightforward to implement
-          touch ${prefix}"NOT_DONE.sex_spec.gz"
-        fi
+    python3 source.py $p ${prefix} ${prefix}"_"$p".regenie.gz"
+    done
+else
+    ## sex specific analyses disabled but create the file so gather step is straightforward to implement
+    touch ${prefix}"NOT_DONE.sex_spec.gz"
+fi
 
     >>>
 
