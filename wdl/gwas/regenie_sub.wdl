@@ -37,14 +37,14 @@ task step2 {
     ## write scripts into files
 
 # Check status of checkpoint with python script
-cat << "__EOF__" > script.py
+cat << "__EOF__" > checkpoint_status.py
 import sys
 import glob
 import argparse
 from enum import Flag,auto
-from typing import Optional
+from typing import Optional, Tuple, List
 # chromosomal range type alias for convenience
-chromRange = tuple[str,int,int]
+chromRange = Tuple[str,int,int]
 class AnalysisState(Flag):
     NOT_STARTED = auto()
     INCOMPLETE = auto()
@@ -69,7 +69,7 @@ prefix= args.prefix
 
 NO_VARIANTS_MIN_VALUE=1000000000
 NO_VARIANTS_MAX_VALUE=-1000000000
-def read_processed_range(files:list[str])->Optional[chromRange]:
+def read_processed_range(files:List[str])->Optional[chromRange]:
     """
     Read in the processed range from files
     Returns an optional tuple of chromosome, first position, last position
@@ -295,7 +295,7 @@ combs.to_csv(prefix+"."+pheno+".sex_spec.gz", compression="gzip", sep=" ", index
 # write checkpointing script
 cat << "__EOF__" > checkpoint.sh
 #!/bin/bash
-touch placeholder.regenie.placeholder placeholder.log
+
 while [ 1 -eq 1 ];do
     tar -cf checkpoint_new.tar *.regenie* *.log *.sex_spec.gz
     cp checkpoint.tar checkpoint_old.tar
@@ -310,11 +310,12 @@ bgenix -g ${bgen} -list |grep -Ev "^#" > variants.list
 
 mkdir checkpoint_folder
 if test -f checkpoint.tar;then
-    if tar -xf checkpoint.tar -C checkpoint_folder/; then
-        python3 script.py variants.list "${is_binary}" "${sep="," phenolist}" "${prefix}"
-    fi
+    tar -xf checkpoint.tar -C checkpoint_folder/
+
 fi
+python3 checkpoint_status.py variants.list --analysis-type "${is_binary}" --endpoints "${sep="," phenolist}" --prefix "${prefix}"
 # start checkpointing script
+touch placeholder.regenie.placeholder placeholder.log placeholder.sex_spec.gz
 ./checkpoint.sh &
 CHECKPOINT_PID=$!
 ## run regenie
@@ -359,7 +360,7 @@ else
     --out ${prefix} \
     $RANGE_OPTION \
     ${options}
-    python3 combine_outputs.py "${prefix}*.regenie*" temp.regenie "${sep="," phenolist}"
+    python3 combine_outputs.py "${prefix}*.regenie*" --output-name temp.regenie --endpoints "${sep="," phenolist}"
     #kill checkpointing for a moment. This is to prevent a situation where the partially compressed files are checkpointed, confusing the checkpointing script.
     kill $CHECKPOINT_PID 
     for p in ${sep=" " phenolist};do
@@ -510,6 +511,7 @@ else
     ## sex specific analyses disabled but create the file so gather step is straightforward to implement
     touch ${prefix}"NOT_DONE.sex_spec.gz"
 fi
+rm placeholder.regenie.placeholder placeholder.log placeholder.sex_spec.gz
 kill $CHECKPOINT_PID
     >>>
 

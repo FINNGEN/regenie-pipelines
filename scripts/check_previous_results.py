@@ -2,9 +2,9 @@ import sys
 import glob
 import argparse
 from enum import Flag,auto
-from typing import Optional
+from typing import Optional, Tuple, List
 # chromosomal range type alias for convenience
-chromRange = tuple[str,int,int]
+chromRange = Tuple[str,int,int]
 class AnalysisState(Flag):
     NOT_STARTED = auto()
     INCOMPLETE = auto()
@@ -29,7 +29,7 @@ prefix= args.prefix
 
 NO_VARIANTS_MIN_VALUE=1000000000
 NO_VARIANTS_MAX_VALUE=-1000000000
-def read_processed_range(files:list[str])->Optional[chromRange]:
+def read_processed_range(files:List[str])->Optional[chromRange]:
     """
     Read in the processed range from files
     Returns an optional tuple of chromosome, first position, last position
