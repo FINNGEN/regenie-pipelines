@@ -382,7 +382,19 @@ then
         #copy things 
         cp checkpoint_folder/*.sex_spec.gz ./
     else
-        zcat ${cov_pheno} | awk 'NR==1{ for(i=1;i<=NF;i++) {h[$i]=i};
+        # create minified file
+        #write patterns into file
+        echo FID >> patterns
+        echo IID >> patterns
+        echo ${sex_col_name} >> patterns
+        echo ${sep="\n" phenolist} >> patterns
+        # take header from covariate file, separate each column name to line, isolate only FID,IID,sex col & endpoints,
+        # take their line numbers,and form comma-separated list from them.
+        # This will reduce time taken for each scan over the minified file to next to nothing.
+        MINIFIED_COLNUMBERS=$(zcat ${cov_pheno}|head -n1|tr "\t" "\n"|grep -nFxf patterns|sed "s_:.*__"|tr "\n" ","|sed "s_,\$__")
+        zcat ${cov_pheno}|cut -f $MINIFIED_COLNUMBERS > minified_phenofile
+
+        cat minified_phenofile | awk 'NR==1{ for(i=1;i<=NF;i++) {h[$i]=i};
                                             if(!("${sex_col_name}" in h)) {
                                             print "Given sex column not found in phenotype file" > "/dev/stderr";
                                             exit 1;
@@ -390,7 +402,7 @@ then
                                     }
                                 NR>1&&$h["${sex_col_name}"]==0{ print $1,$1}' > males
 
-        zcat ${cov_pheno} | awk 'NR==1{  for(i=1;i<=NF;i++) {h[$i]=i };
+        cat minified_phenofile | awk 'NR==1{  for(i=1;i<=NF;i++) {h[$i]=i };
                                         if(!("${sex_col_name}" in h))
                                         {
                                         print "Given sex column not found in phenotype file" > "/dev/stderr";
@@ -412,11 +424,11 @@ then
 
         if [[ "${is_binary}" == "true" ]];
         then
-            N_cases_females=$(awk -v pheno=$p 'FNR==NR { females[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in females {print $1}' females <(zcat ${cov_pheno}) | wc -l)
-            N_cases_males=$(awk -v pheno=$p 'FNR==NR { males[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in males {print $1}' males <(zcat ${cov_pheno}) | wc -l)
+            N_cases_females=$(awk -v pheno=$p 'FNR==NR { females[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in females {print $1}' females <(cat minified_phenofile}) | wc -l)
+            N_cases_males=$(awk -v pheno=$p 'FNR==NR { males[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in males {print $1}' males <(cat minified_phenofile) | wc -l)
         else 
-            N_cases_females=$(awk -v pheno=$p 'FNR==NR { females[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]!="NA" && $1 in females {print $1}' females <(zcat ${cov_pheno}) | wc -l)
-            N_cases_males=$(awk -v pheno=$p 'FNR==NR { males[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]!="NA" && $1 in males {print $1}' males <(zcat ${cov_pheno}) | wc -l)
+            N_cases_females=$(awk -v pheno=$p 'FNR==NR { females[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]!="NA" && $1 in females {print $1}' females <(cat minified_phenofile) | wc -l)
+            N_cases_males=$(awk -v pheno=$p 'FNR==NR { males[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]!="NA" && $1 in males {print $1}' males <(cat minified_phenofile) | wc -l)
         fi 
 
         echo "Female cases: "$N_cases_females
@@ -484,7 +496,7 @@ then
             --covarColList $sex_covars \
             --phenoFile ${cov_pheno} \
             --phenoColList $p \
-            --pred ${pred} \
+            --pred loco_list \
             --bsize ${bsize} \
             --threads $n_cpu \
             --gz \
@@ -680,7 +692,7 @@ task summary{
                 cols = v.strip("\n").split("\t")
                 if cols[variant_idx] == variant:
                     return FGAnnotation(cols[gene_idx],cols[consequence_idx],cols[rsid_idx],cols[exome_enr_idx],cols[genome_enr_idx])
-            return FGAnnotation("","")
+            return FGAnnotation("","","","","")
 
         #required columns
         fg_req_cols=["#variant","gene_most_severe","most_severe","rsid","EXOME_enrichment_nfsee","GENOME_enrichment_nfee"]
