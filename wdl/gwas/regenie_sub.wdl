@@ -300,7 +300,7 @@ while [ 1 -eq 1 ];do
     tar -cf checkpoint_new.tar *.regenie* *.log *.sex_spec.gz
     cp checkpoint.tar checkpoint_old.tar
     mv checkpoint_new.tar checkpoint.tar
-    sleep 60
+    sleep 120
 done
 __EOF__
 chmod +x checkpoint.sh
