@@ -405,7 +405,7 @@ task summary{
                 cols = v.strip("\n").split("\t")
                 if cols[variant_idx] == variant:
                     return FGAnnotation(cols[gene_idx],cols[consequence_idx],cols[rsid_idx],cols[exome_enr_idx],cols[genome_enr_idx])
-            return FGAnnotation("","")
+            return FGAnnotation("","","","","")
 
         #required columns
         fg_req_cols=["#variant","gene_most_severe","most_severe","rsid","EXOME_enrichment_nfsee","GENOME_enrichment_nfee"]
