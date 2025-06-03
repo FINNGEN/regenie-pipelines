@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 from collections import defaultdict as dd
 
-regenie_covariates= "SEX_IMPUTED,AGE_AT_DEATH_OR_END_OF_FOLLOWUP,PC1,PC2,PC3,PC4,PC5,PC6,PC7,PC8,PC9,PC10,IS_FINNGEN2_CHIP,BATCH_DS1_BOTNIA_Dgi_norm,BATCH_DS10_FINRISK_Palotie_norm,BATCH_DS11_FINRISK_PredictCVD_COROGENE_Tarto_norm,BATCH_DS12_FINRISK_Summit_norm,BATCH_DS13_FINRISK_Bf_norm,BATCH_DS14_GENERISK_norm,BATCH_DS15_H2000_Broad_norm,BATCH_DS16_H2000_Fimm_norm,BATCH_DS17_H2000_Genmets_norm,BATCH_DS18_MIGRAINE_1_norm,BATCH_DS19_MIGRAINE_2_norm,BATCH_DS2_BOTNIA_T2dgo_norm,BATCH_DS20_SUPER_1_norm,BATCH_DS21_SUPER_2_norm,BATCH_DS22_TWINS_1_norm,BATCH_DS23_TWINS_2_norm,BATCH_DS24_SUPER_3_norm,BATCH_DS25_BOTNIA_Regeneron_norm,BATCH_DS3_COROGENE_Sanger_norm,BATCH_DS4_FINRISK_Corogene_norm,BATCH_DS5_FINRISK_Engage_norm,BATCH_DS6_FINRISK_FR02_Broad_norm,BATCH_DS7_FINRISK_FR12_norm,BATCH_DS8_FINRISK_Finpcga_norm,BATCH_DS9_FINRISK_Mrpred_norm"
+regenie_covariates= "SEX_IMPUTED,AGE_AT_DEATH_OR_END_OF_FOLLOWUP,PC1,PC2,PC3,PC4,PC5,PC6,PC7,PC8,PC9,PC10,IS_FINNGEN2_CHIP,BATCH_DS1_BOTNIA_Dgi_norm,BATCH_DS10_FINRISK_Palotie_norm,BATCH_DS11_FINRISK_PredictCVD_COROGENE_Tarto_norm,BATCH_DS12_FINRISK_Summit_norm,BATCH_DS13_FINRISK_Bf_norm,BATCH_DS14_GENERISK_norm,BATCH_DS15_H2000_Broad_norm,BATCH_DS16_H2000_Fimm_norm,BATCH_DS17_H2000_Genmets_norm_relift,BATCH_DS18_MIGRAINE_1_norm_relift,BATCH_DS19_MIGRAINE_2_norm,BATCH_DS2_BOTNIA_T2dgo_norm,BATCH_DS20_SUPER_1_norm_relift,BATCH_DS21_SUPER_2_norm_relift,BATCH_DS22_TWINS_1_norm,BATCH_DS23_TWINS_2_norm_nosymmetric,BATCH_DS24_SUPER_3_norm,BATCH_DS25_BOTNIA_Regeneron_norm,BATCH_DS26_DIREVA_norm,BATCH_DS27_NFBC66_norm,BATCH_DS28_NFBC86_norm,BATCH_DS3_COROGENE_Sanger_norm,BATCH_DS4_FINRISK_Corogene_norm,BATCH_DS5_FINRISK_Engage_norm,BATCH_DS6_FINRISK_FR02_Broad_norm_relift,BATCH_DS7_FINRISK_FR12_norm,BATCH_DS8_FINRISK_Finpcga_norm,BATCH_DS9_FINRISK_Mrpred_norm"
 
 sub_dict =  {str(elem):str(elem) for elem in range(1,23)}
 sub_dict.update({"X":"23"})
@@ -144,14 +144,15 @@ def main(locus,region,args,tmp_pheno_file,sum_dict,threads):
     
     result_file = args.out + f"_{args.pheno}_{locus}.independent.snps"
     #inital values to start looping
-    condition_variant = locus
+    starting_list = locus.split(',')
+    condition_variant = starting_list[-1]
     with open(result_file,'wt') as o:
         header = ['VARIANT','BETA','SE','MLOG10P','BETA_cond','SE_cond','MLOG10P_cond','VARIANT_cond']
         o.write("\t".join(header) + '\n')
         o.write('\t'.join( [condition_variant]+ get_sum_dict_data(sum_dict,condition_variant)  +["NA"]*4    ) + '\n')
 
         print(f"Variant info from original FG sumstats {map_vals_to_string(get_sum_dict_data(sum_dict,condition_variant))}")
-        step,condition_list = 1,[locus]
+        step,condition_list = 1,starting_list
         # step is non 0 if hit is significant. Else truncate when max step is reached 
         while 0 <  step <= args.max_steps:
             out_file,ret = regenie_run(args,step,args.bgen,args.sample_file,tmp_pheno_file,args.covariates,condition_list,locus,args.null_file,args.pheno,region,log_file,threads,params = args.regenie_params)
@@ -186,7 +187,7 @@ if __name__ == '__main__':
     parser.add_argument('--bgen',type = file_exists,help ='Path to bgen',required=True)
     parser.add_argument('--sample-file',type = file_exists,help ='Path to bgen sample file (if not in same directory as bgen)',required=False)
     parser.add_argument('--sumstats',type = file_exists,help ='Path to original sumstats',required=True)
-    parser.add_argument('--regenie-params',type=str,help ='extra bgen params',default = ' --bt --bsize 200 ' )
+    parser.add_argument('--regenie-params',type=str,help ='extra bgen params',default = ' --bt --bsize 200 --ref-first' )
     parser.add_argument('--null-file',type = file_exists,help ='File with null info.',required=True)
     parser.add_argument('--force',action = 'store_true',help = 'Flag for forcing re-run.')
     parser.add_argument( "-log",  "--log",  default="warning", choices = log_levels, help=(  "Provide logging level. " "Example --log debug', default='warning'"))
@@ -202,7 +203,7 @@ if __name__ == '__main__':
 
 
     range_group = parser.add_mutually_exclusive_group(required=True)
-    range_group.add_argument('--locus-region',type =str,nargs=2,help ='Locus & Region to filter CHR:START-END')
+    range_group.add_argument('--locus-region',type =str,nargs=2,help ='Locus & Region to filter CHR:START-END.Locus can be list of comma separated locis. In case condition will start from last variant.')
     range_group.add_argument('--locus-list',type = file_exists,help="File with list of locus and regions")
 
     args = parser.parse_args()
@@ -247,7 +248,6 @@ if __name__ == '__main__':
     # create tmp pheno file (lighter)
     tmp_pheno_file = filter_pheno(args) 
     for locus,region in region_list:
-        print(sum_dict[locus])
         main(locus,region,args,tmp_pheno_file,sum_dict,args.threads)
                 
     
