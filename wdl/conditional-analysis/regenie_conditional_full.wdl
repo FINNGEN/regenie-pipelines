@@ -415,7 +415,7 @@ task merge_regions {
   String outfile = "regions.txt"
   command <<<
   while read f; do cat $f >> tmp.txt; done <  ~{write_lines(hits)}
-  cat tmp.txt ~{if test then " | shuf | head -n 10" else ""}) > ~{outfile}
+  cat tmp.txt ~{if test then " | shuf | head -n 10" else ""} > ~{outfile}
   >>>
   
   output {
