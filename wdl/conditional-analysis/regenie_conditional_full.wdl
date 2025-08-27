@@ -154,7 +154,7 @@ task regenie_conditional {
 
 
   # runtime params based on file sizes
-  Int disk_size = ceil(size(bgen,'GB')) + ceil(size(sumstats,'GB')) + ceil(size(null,'GB')) + ceil(size(pheno_file,'GB')) + 1
+  Int disk_size = 120
   String final_docker = if defined(regenie_docker) then regenie_docker else docker
 
 
@@ -184,7 +184,6 @@ task regenie_conditional {
     disks: "local-disk ${disk_size} HDD"
     zones: "europe-west1-b europe-west1-c europe-west1-d"
     preemptible: "1"
-    noAddress:true  
   }
 }
 

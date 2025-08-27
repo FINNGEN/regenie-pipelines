@@ -2,7 +2,7 @@
     "conditional_pheweb.docker": "europe-west1-docker.pkg.dev/finngen-refinery-dev/fg-refinery-registry/regenie:3.3_r12_cond",
     "conditional_pheweb.release": "13",
     "conditional_pheweb.pheweb_import_munge.regions": "gs://r13-data/conditional_analysis/inputs/regions.txt",
-    "conditional_pheweb.split_inputs.outputs":"gs://r13-data/conditional_analysis/inputs/all_outputs.txt",
-    "conditional_pheweb.split_inputs.chains":"gs://r13-data/conditional_analysis/inputs/all_chains.txt",
+    "conditional_pheweb.split_inputs.outputs":"gs://r13-data/conditional_analysis/inputs/conditional_analysis.all_outputs",
+    "conditional_pheweb.split_inputs.chains":"gs://r13-data/conditional_analysis/inputs/conditional_analysis.all_chains",
     "conditional_pheweb.split_inputs.chunks": 30,
 }
