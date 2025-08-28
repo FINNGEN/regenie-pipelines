@@ -53,103 +53,16 @@ workflow conditional_analysis {
    Array[File] results = flatten(regenie_conditional.conditional_chains)
    call merge_results{input:docker=docker,prefix=prefix,result_list = results,phenos_list = phenos_to_cond}
 
-   #merges all regions into single file
-   Array[File] regenie_outputs = flatten(regenie_conditional.regenie_output)
-   call pheweb_import_munge{input:docker=docker,release=release,prefix=prefix,cond_locus_hits=results,regions=merge_regions.regions,regenie_outputs=regenie_outputs}
+   
+
+   output {
+     Array[File] all_chains = flatten(regenie_conditional.conditional_chains)
+     Array[File] all_outputs = flatten(regenie_conditional.regenie_output)
+     Array[File] pheno_chains = merge_results.pheno_independent_snps
+     
+   }
 }
- 
-task pheweb_import_munge{
-  input {
-    String release
-    String prefix
-    File regions
-    Array[File] cond_locus_hits
-    String docker
-    Array[File] regenie_outputs
-  }
 
-  Int disk_size = ceil(size(cond_locus_hits[0],"MB")*length(cond_locus_hits)*2/1000 + size(regenie_outputs[0],"MB")*length(regenie_outputs)*2/1000 +10)
-  String out_file = prefix + "_sql.merged.txt"
-  command <<<
-
-    python3 <<CODE
-    import os,sys,math
-    
-    release = '~{release}'
-    prefix = '~{prefix}'
-    out_dir = "."
-    region_file = '~{regions}'
-    hits = '~{write_lines(cond_locus_hits)}'
-
-    out_file = os.path.join(out_dir,f"{prefix}_sql.merged.txt")
-    #reads in all paths
-    with open(hits) as f:hits_paths = [elem.strip() for elem in f.readlines()]
-    #loop over region data, find matching file(s), merge info and build sql table
-    with open(region_file) as f,open(out_file,'wt') as o:
-        count = 0
-        for line in f:
-            pheno,chrom,region,locus,*_ = line.strip().split()
-            id_string = f"{prefix}_{pheno}_{locus}"
-            matches =[path for path in hits_paths if id_string in path]
-            if matches:
-                assert len(matches)==1
-                count +=1
-                sys.stdout.write("\r%s" % f"{pheno} {count}/{len(hits_paths)}                                                  ")
-                sys.stdout.flush()
-                hit_file = matches[0]
-                file_root = os.path.basename(hit_file).split("chr")[0]
-                start,end=region.split(':')[1].split("-")
-                with open(hit_file) as i: variants = [elem.strip().split()[0] for elem in i][1:]
-                out_data = [release,"conditional",pheno,chrom,start,end,len(variants),"",','.join(variants),file_root]
-                o.write(','.join([f'"{elem}"' for elem in out_data])+'\n')
-
-
-    #fixing columns of regenie outputs
-    inputs = '~{write_lines(regenie_outputs)}'
-    separator = " "
-    input_columns = ['CHROM', 'GENPOS', 'ID', 'ALLELE0', 'ALLELE1', 'A1FREQ', 'INFO', 'N', 'TEST', 'BETA', 'SE', 'CHISQ', 'LOG10P', 'EXTRA']
-    out_columns = ['SNPID','CHR','rsid','POS','Allele1','Allele2','AF_Allele2','p.value_cond','BETA_cond','SE_cond']
-    map_columns = {"SNPID":"ID","CHR":"CHROM","rsid":"ID","POS":"GENPOS","Allele1":"ALLELE0","Allele2":"ALLELE1","AF_Allele2":"A1FREQ","p.value_cond":"LOG10P","BETA_cond":'BETA','SE_cond':'SE'}
-    with open(inputs) as f:paths = [elem.strip() for elem in f.readlines()]
-    n_paths = len(paths)
-    for i,path in enumerate(paths):
-        sys.stdout.write("\r%s" % f"{path} {i+1}/{n_paths}                                                  ")
-        sys.stdout.flush()
-        out_file = os.path.join(out_dir,os.path.basename(path))
-        with open(path) as i,open(out_file,'wt') as o:
-            header_index = {h:i for i,h in enumerate(next(i).strip().split(separator))}
-            o.write(separator.join(out_columns) +'\n')
-            for line in i:
-                line = line.strip().split(separator)
-                out_line = []
-                for key in out_columns:
-                    #i take the column mapping and then i get the data from the input header mapping in return
-                    data_index = header_index[map_columns[key]]
-                    value = str(line[data_index])                    #get data from input 
-                    if key =="p.value_cond":value =  math.pow(10,-float(value)) #fix pval
-                    out_line.append(value)
-
-                o.write(separator.join(map(str,out_line)) +'\n')
-    CODE
-    ls
-  >>>
-  output {
-    File csv_sql = out_file
-    Array[File] munged_regenie = glob("./finngen*conditional")    
-  }
-  
-  runtime {
-    cpu: "4"
-    docker: "${docker}"
-    memory: "4 GB"
-    disks: "local-disk ${disk_size} HDD"
-    zones: "europe-west1-b europe-west1-c europe-west1-d"
-    preemptible: "1"
-      
-  }
-  
-
-}
 
 task merge_results {
 
@@ -241,7 +154,7 @@ task regenie_conditional {
 
 
   # runtime params based on file sizes
-  Int disk_size = ceil(size(bgen,'GB')) + ceil(size(sumstats,'GB')) + ceil(size(null,'GB')) + ceil(size(pheno_file,'GB')) + 1
+  Int disk_size = 120
   String final_docker = if defined(regenie_docker) then regenie_docker else docker
 
 
@@ -271,26 +184,24 @@ task regenie_conditional {
     disks: "local-disk ${disk_size} HDD"
     zones: "europe-west1-b europe-west1-c europe-west1-d"
     preemptible: "1"
-  
   }
-  
 }
 
 
 task filter_covariates {
-
+  
   input {
     File pheno_file
     Array[String] covariates
     File pheno_list
     String docker
     Int threshold_cov_count
-    }
-
-    String outfile = "./pheno_cov_map_" + threshold_cov_count + ".txt"
-    Int disk_size = ceil(size(pheno_file,'GB')) + 2 * 2
-    
-    command <<<
+  }
+  
+  String outfile = "./pheno_cov_map_" + threshold_cov_count + ".txt"
+  Int disk_size = ceil(size(pheno_file,'GB')) + 2 * 2
+  
+  command <<<
 
       set -euxo pipefail
       
@@ -337,11 +248,11 @@ task filter_covariates {
       
       CODE
 
-    >>>
-      output {
-	File cov_pheno_map = outfile
-	File cov_pheno_warning = sub(outfile,'.txt','.err.txt')
-      }
+  >>>
+  output {
+    File cov_pheno_map = outfile
+    File cov_pheno_warning = sub(outfile,'.txt','.err.txt')
+  }
   
   runtime {
     cpu: "1"
@@ -368,7 +279,7 @@ task extract_cond_regions {
     String alt_col
     String mlogp_col
     Array[String] chroms 
-
+    Boolean add_hla
     String docker
     Float mlogp_threshold
 
@@ -382,10 +293,10 @@ task extract_cond_regions {
   String outfile= pheno + "_sig_hits.txt" 
   
   command <<<
-
-    python3 /scripts/filter_hits_regions.py --sumstats ~{sumstats} --regions ~{region} \
-    --pheno ~{pheno} --pval_threshold ~{mlogp_threshold} \
-    --pos_col ~{pos_col} --chr_col ~{chr_col} --ref_col ~{ref_col} --alt_col ~{alt_col} --mlogp_col ~{mlogp_col}  --chroms ~{sep=" " chroms} --out ./ --log info
+  cat ~{region}   > tmp.bed
+  ~{if add_hla then " echo -e '6\t29000000\t34000000'  >> tmp.bed " else ""}
+  
+  python3 /scripts/filter_hits_regions.py --sumstats ~{sumstats} --regions tmp.bed --pheno ~{pheno} --pval_threshold ~{mlogp_threshold}  --pos_col ~{pos_col} --chr_col ~{chr_col} --ref_col ~{ref_col} --alt_col ~{alt_col} --mlogp_col ~{mlogp_col}  --chroms ~{sep=" " chroms} --out ./ --log info
   >>>
   
   output {
@@ -415,7 +326,7 @@ task merge_regions {
   String outfile = "regions.txt"
   command <<<
   while read f; do cat $f >> tmp.txt; done <  ~{write_lines(hits)}
-  cat tmp.txt ~{if test then " | shuf | head -n 10" else ""}) > ~{outfile}
+  cat tmp.txt ~{if test then " | shuf | head -n 10" else ""} > ~{outfile}
   >>>
   
   output {
