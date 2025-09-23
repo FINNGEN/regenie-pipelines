@@ -1,0 +1,35 @@
+{
+    "regenie.sub_step1.docker": "europe-west1-docker.pkg.dev/finngen-refinery-dev/fg-refinery-registry/regenie:3.3_r12_cond_hla",
+    "regenie.sub_step2.docker": "europe-west1-docker.pkg.dev/finngen-refinery-dev/fg-refinery-registry/regenie:3.3_r12_cond_hla",
+
+    "regenie.phenolist": "gs://r13-data/chip_analysis/additive_chip_gwas/inputs/",
+    "regenie.is_binary": true,
+    "regenie.cov_pheno": "gs://r13-data/chip_analysis/pheno/R13_chip_COV_PHENO_V1.gz",
+    "regenie.covariates": "SEX_IMPUTED,AGE_AT_DEATH_OR_END_OF_FOLLOWUP,PC{1:10},IS_FINNGEN2_CHIP,BATCH_AxiomGT1_b01_V4,BATCH_AxiomGT1_b02_V4,BATCH_AxiomGT1_b03_V4,BATCH_AxiomGT1_b04_V4,BATCH_AxiomGT1_b05_V4,BATCH_AxiomGT1_b06_V4,BATCH_AxiomGT1_b07_V4,BATCH_AxiomGT1_b08_V4,BATCH_AxiomGT1_b09_V4,BATCH_AxiomGT1_b10_V4,BATCH_AxiomGT1_b100_V6,BATCH_AxiomGT1_b101_V6,BATCH_AxiomGT1_b102_V6,BATCH_AxiomGT1_b103_V7,BATCH_AxiomGT1_b104_V7,BATCH_AxiomGT1_b105_V7,BATCH_AxiomGT1_b106_V7,BATCH_AxiomGT1_b107_V7,BATCH_AxiomGT1_b108_V7,BATCH_AxiomGT1_b109_V7,BATCH_AxiomGT1_b11_V4,BATCH_AxiomGT1_b110_V7,BATCH_AxiomGT1_b111_V7,BATCH_AxiomGT1_b112_V7,BATCH_AxiomGT1_b113_V7,BATCH_AxiomGT1_b12_V4,BATCH_AxiomGT1_b13_V4,BATCH_AxiomGT1_b14_V4,BATCH_AxiomGT1_b15_V4,BATCH_AxiomGT1_b17_V4,BATCH_AxiomGT1_b18_V4,BATCH_AxiomGT1_b19_V4,BATCH_AxiomGT1_b20_V4,BATCH_AxiomGT1_b21_V4,BATCH_AxiomGT1_b22_V4,BATCH_AxiomGT1_b23_V4,BATCH_AxiomGT1_b24_V4,BATCH_AxiomGT1_b25_V4,BATCH_AxiomGT1_b26_V2P2,BATCH_AxiomGT1_b27_V2P2,BATCH_AxiomGT1_b28_V2P2,BATCH_AxiomGT1_b29_V2P2,BATCH_AxiomGT1_b30_V2P2,BATCH_AxiomGT1_b31_V7,BATCH_AxiomGT1_b32_V7,BATCH_AxiomGT1_b33_V7,BATCH_AxiomGT1_b34_V7,BATCH_AxiomGT1_b35_V7,BATCH_AxiomGT1_b36_V7,BATCH_AxiomGT1_b37_V7,BATCH_AxiomGT1_b38_V7,BATCH_AxiomGT1_b39_V7,BATCH_AxiomGT1_b40_V7,BATCH_AxiomGT1_b41_V7,BATCH_AxiomGT1_b42_V7,BATCH_AxiomGT1_b43_V7,BATCH_AxiomGT1_b44_V7,BATCH_AxiomGT1_b45_V7,BATCH_AxiomGT1_b46_V7,BATCH_AxiomGT1_b47_V7,BATCH_AxiomGT1_b48_V7,BATCH_AxiomGT1_b49_V7,BATCH_AxiomGT1_b50_V7,BATCH_AxiomGT1_b51_V7,BATCH_AxiomGT1_b52_V7,BATCH_AxiomGT1_b53_V7,BATCH_AxiomGT1_b54_V7,BATCH_AxiomGT1_b55_V7,BATCH_AxiomGT1_b56_V7,BATCH_AxiomGT1_b57_V7,BATCH_AxiomGT1_b58_V7,BATCH_AxiomGT1_b59_V7,BATCH_AxiomGT1_b60_V7,BATCH_AxiomGT1_b61_V7,BATCH_AxiomGT1_b62_V7,BATCH_AxiomGT1_b63_V7,BATCH_AxiomGT1_b64_V7,BATCH_AxiomGT1_b65_V7,BATCH_AxiomGT1_b66_V7,BATCH_AxiomGT1_b67_V7,BATCH_AxiomGT1_b68_V7,BATCH_AxiomGT1_b69_V7,BATCH_AxiomGT1_b70_V7,BATCH_AxiomGT1_b71_V7,BATCH_AxiomGT1_b72_V7,BATCH_AxiomGT1_b73_V7,BATCH_AxiomGT1_b74_V7,BATCH_AxiomGT1_b75_V7,BATCH_AxiomGT1_b76_V7,BATCH_AxiomGT1_b77_V7,BATCH_AxiomGT1_b78_V7,BATCH_AxiomGT1_b79_V7,BATCH_AxiomGT1_b80_V7,BATCH_AxiomGT1_b81_V7,BATCH_AxiomGT1_b82_V7,BATCH_AxiomGT1_b83_V7,BATCH_AxiomGT1_b84_V7,BATCH_AxiomGT1_b85_V7,BATCH_AxiomGT1_b86_V7,BATCH_AxiomGT1_b87_V7,BATCH_AxiomGT1_b88_V7,BATCH_AxiomGT1_b89_V7,BATCH_AxiomGT1_b90_V6,BATCH_AxiomGT1_b91_V6,BATCH_AxiomGT1_b92_V6,BATCH_AxiomGT1_b93_V6,BATCH_AxiomGT1_b94_V6,BATCH_AxiomGT1_b95_V6,BATCH_AxiomGT1_b96_V6,BATCH_AxiomGT1_b97_V6,BATCH_AxiomGT1_b98_V6,BATCH_AxiomGT1_b99_V6",
+
+    "regenie.auto_remove_sex_covar": true,
+    "regenie.sex_col_name": "SEX_IMPUTED",
+
+    "regenie.sub_step2.run_sex_specific": false,
+    "regenie.sub_step2.step2.sex_specific_logpval": 1.623249,
+
+    "regenie.sub_step1.step1.covariate_inclusion_threshold": 10,
+    "regenie.sub_step1.step1.grm_bed": "gs://r13-data/chip_analysis/grm/autosome_only/r13_chip_grm_LD0.2_geno0.03_maf_0.01_autosome.bed",
+    "regenie.sub_step1.step1.bsize": 1000,
+    "regenie.sub_step1.step1.options": " --loocv ",
+
+    "regenie.sub_step2.bgenlist": "gs://r13-data/chip_analysis/bgen/chip_bgenlist",
+    "regenie.sub_step2.step2.test": "additive",
+    "regenie.sub_step2.step2.bsize": 400,
+    "regenie.sub_step2.step2.options": "--firth --approx --pThresh 0.01 --firth-se",
+
+    "regenie.sub_step2.gather.docker": "europe-docker.pkg.dev/finngen-refinery-dev/eu.gcr.io/saige:0.39.1-fg-squashed",
+
+    "regenie.sub_step2.summary.docker": "europe-docker.pkg.dev/finngen-refinery-dev/eu.gcr.io/saige:0.39.1-fg-pysam-squashed",
+    "regenie.sub_step2.summary.finngen_annotation": "gs://r13-data/annotation/R13_annotated_variants_v0.small.gz",
+    "regenie.sub_step2.summary.gnomad_annotation": "gs://finngen_commons/gnomad/gnomad_functional_variants/fin_enriched_genomes_select_columns.txt.gz",
+    "regenie.sub_step2.summary.summary_pval_thresh": 1e-6,
+    "regenie.sub_step2.summary.coding_pval_thresh": 1e-4,
+
+    "regenie.coding_gather.docker": "europe-docker.pkg.dev/finngen-refinery-dev/eu.gcr.io/bioinformatics:0.8.2-squashed"
+}
