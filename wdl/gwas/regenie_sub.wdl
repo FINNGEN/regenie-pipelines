@@ -394,7 +394,7 @@ task summary{
         pheno = os.path.splitext(os.path.basename(fname))[0]
         output_summary_name = pheno + "_summary.txt"
         output_coding_name = pheno + "_coding.txt"
-        FGAnnotation = NamedTuple('FGAnnotation',[('gene',str),('consequence',str),('rsid',str),('EXOME_enrichment_nfsee',str),('GENOME_enrichment_nfee',str)])
+        FGAnnotation = NamedTuple('FGAnnotation',[('gene',str),('consequence',str),('rsid',str),('EXOME_enrichment_nfe',str),('GENOME_enrichment_nfe',str)])
         def get_header(reader,file):
             with reader(file, "rt") as f:
                 l = f.readline()
@@ -408,7 +408,7 @@ task summary{
             return FGAnnotation("","","","","")
 
         #required columns
-        fg_req_cols=["#variant","gene_most_severe","most_severe","rsid","EXOME_enrichment_nfsee","GENOME_enrichment_nfee"]
+        fg_req_cols=["#variant","gene_most_severe","most_severe","rsid","EXOME_enrichment_nfe","GENOME_enrichment_nfe"]
         #open finngen annotation tabix
         fg_tabix = pysam.TabixFile(finngen_annotation_file,parser=None)
         #get fg header column positions
@@ -417,7 +417,7 @@ task summary{
         #check for fg column existence
         if not all([a in fg_header for a in fg_req_cols]):
             raise Exception("Not all columns present in FinnGen annotation! Aborting...")
-        var_idx, gene_idx, cons_idx, rsid_idx, exome_enr_idx, genome_enr_idx = (fg_idx["#variant"],fg_idx["gene_most_severe"],fg_idx["most_severe"],fg_idx["rsid"],fg_idx["EXOME_enrichment_nfsee"],fg_idx["GENOME_enrichment_nfee"])
+        var_idx, gene_idx, cons_idx, rsid_idx, exome_enr_idx, genome_enr_idx = (fg_idx["#variant"],fg_idx["gene_most_severe"],fg_idx["most_severe"],fg_idx["rsid"],fg_idx["EXOME_enrichment_nfe"],fg_idx["GENOME_enrichment_nfe"])
 
         with gzip.open(fname, "rt") as file:
             #open output file
@@ -435,7 +435,7 @@ task summary{
                 )
 
                 #add rsid, gene name, consequence, enrichments, phenotype
-                header.extend(["rsid","gene_most_severe","most_severe","EXOME_enrichment_nfsee","GENOME_enrichment_nfee","phenotype"])
+                header.extend(["rsid","gene_most_severe","most_severe","EXOME_enrichment_nfe","GENOME_enrichment_nfe","phenotype"])
                 summary_outfile.write("\t".join(header)+"\n")
                 coding_outfile.write("\t".join(header)+"\n")
 
@@ -455,8 +455,8 @@ task summary{
                             fg_a.rsid,
                             fg_a.gene,
                             fg_a.consequence,
-                            fg_a.EXOME_enrichment_nfsee,
-                            fg_a.GENOME_enrichment_nfee,
+                            fg_a.EXOME_enrichment_nfe,
+                            fg_a.GENOME_enrichment_nfe,
                             pheno,
                         ])
                         #gather row
