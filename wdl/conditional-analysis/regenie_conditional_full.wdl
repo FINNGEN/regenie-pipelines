@@ -105,7 +105,7 @@ task merge_results {
     disks: "local-disk 10 HDD"
     zones: "europe-west1-b europe-west1-c europe-west1-d"
     preemptible: "1"
-  
+    noAddress: true
   }
    
 }
@@ -184,6 +184,7 @@ task regenie_conditional {
     disks: "local-disk ${disk_size} HDD"
     zones: "europe-west1-b europe-west1-c europe-west1-d"
     preemptible: "1"
+    noAddress: true
   }
 }
 
@@ -261,6 +262,7 @@ task filter_covariates {
     disks: "local-disk ${disk_size} HDD"
     zones: "europe-west1-b europe-west1-c europe-west1-d"
     preemptible: "1"
+    noAddress: true
   }
 
 }
@@ -311,6 +313,7 @@ task extract_cond_regions {
     disks: "local-disk ${disk_size} HDD"
     zones: "europe-west1-b europe-west1-c europe-west1-d"
     preemptible: "1"
+    noAddress: true
   }
 }
 
@@ -340,5 +343,6 @@ task merge_regions {
     disks: "local-disk 2 HDD"
     zones: "europe-west1-b europe-west1-c europe-west1-d"
     preemptible: "1"
+    noAddress: true
   }
 }
