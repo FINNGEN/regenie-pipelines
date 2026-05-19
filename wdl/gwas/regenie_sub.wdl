@@ -771,6 +771,7 @@ task summary{
         disks: "local-disk 200 HDD"
         zones: "europe-west1-b europe-west1-c europe-west1-d"
         preemptible: 2
+        noAddress: true
     }
 }
 
