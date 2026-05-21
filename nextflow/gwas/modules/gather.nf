@@ -9,14 +9,17 @@ process GATHER {
 
     cpus   1
     memory 8.GB
-    disk   '200 GB'
+    disk   200.GB, type: 'pd-standard'
 
     publishDir "${params.outdir}/regenie",    mode: 'copy', pattern: 'regenie/*.gz*'
     publishDir "${params.outdir}/munged",     mode: 'copy', pattern: 'munged/*.gz*'
-    publishDir "${params.outdir}/qq",         mode: 'copy', pattern: '*.png'
-    publishDir "${params.outdir}/qq",         mode: 'copy', pattern: '*qquantiles.txt'
-    publishDir "${params.outdir}/qq",         mode: 'copy', pattern: 'qq_out'
-    publishDir "${params.outdir}/qq",         mode: 'copy', pattern: 'qq_err'
+    // Disambiguate per-pheno on publish: every task writes the same in-workdir
+    // names (qq_out / qq_err and the skip_qq NOTDONE placeholders), so many
+    // tasks racing to copy to the same gs:// destination trips publishDir.
+    publishDir "${params.outdir}/qq",         mode: 'copy', pattern: '*.png',           saveAs: { f -> f.startsWith('NOTDONE') ? "${pheno}.${f}" : f }
+    publishDir "${params.outdir}/qq",         mode: 'copy', pattern: '*qquantiles.txt', saveAs: { f -> f.startsWith('NOTDONE') ? "${pheno}.${f}" : f }
+    publishDir "${params.outdir}/qq",         mode: 'copy', pattern: 'qq_out',          saveAs: { "${pheno}.qq_out" }
+    publishDir "${params.outdir}/qq",         mode: 'copy', pattern: 'qq_err',          saveAs: { "${pheno}.qq_err" }
 
     input:
     tuple val(pheno),

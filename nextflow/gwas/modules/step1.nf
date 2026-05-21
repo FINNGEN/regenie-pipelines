@@ -6,8 +6,8 @@ process STEP1 {
     container params.step1_docker
 
     cpus   { phenolist.size() == 1 ? 1 : (phenolist.size() <= 10 ? 2 : 4) }
-    memory { phenolist.size() == 1 ? 12.GB : 16.GB }
-    disk   '200 GB'
+    memory { 15.GB }
+    disk   200.GB, type: 'pd-standard'
 
     publishDir "${params.outdir}/step1/${chunk_id}", mode: 'copy'
 
@@ -20,7 +20,7 @@ process STEP1 {
           path("*.${chunk_id}.pred.list"),
           path("*.loco.gz"),
           path("*.${chunk_id}.firth.list"),
-          path("*.firth.gz", optional: true),
+          path("*.firth.gz", arity: '0..*'),
           path("new_covars"),
           path("is_single_sex"),
           path("${prefix}.log"), emit: main

@@ -58,7 +58,7 @@ workflow {
         // Reuse published step1 outputs — skip running STEP1 entirely.
         def grm_base = file(params.grm_bed).getBaseName()
         step1_resolved = pheno_chunks_ch.map { chunk_id, phenolist ->
-            def dir = file("${params.step1_results}/${chunk_id}")
+            def dir = "${params.step1_results}/${chunk_id}"
             def pred       = file("${dir}/${grm_base}.${chunk_id}.pred.list")
             def loco       = phenolist.collect { pheno -> file("${dir}/${grm_base}.${pheno}.loco.gz") }
             def firth_list = file("${dir}/${grm_base}.${chunk_id}.firth.list")
@@ -93,6 +93,7 @@ workflow {
     // bgen variant: <path>.bgen + <path>.bgen.bgi + <path>.bgen.sample siblings.
     // pgen variant: <prefix>.pgen + <prefix>.pvar + <prefix>.psam siblings.
     // Param name stays 'bgenlist' for backwards-compat with the r13 JSONs.
+    int n_geno = file(params.bgenlist).readLines().findAll { it.trim() }.size()
     geno_ch = Channel.fromPath(params.bgenlist)
         .splitText()
         .map { it.trim() }
@@ -109,26 +110,36 @@ workflow {
     // --- STEP 2 -----------------------------------------------------------
     if (params.step2_results) {
         // Reuse published step2 outputs — skip running STEP2 entirely.
-        all_regenie_ch = Channel.fromPath("${params.step2_results}/*.regenie.gz").toList()
-        all_sex_ch     = Channel.fromPath("${params.step2_results}/*.sex_spec.gz").toList()
-        phenos_flat    = pheno_chunks_ch.flatMap { chunk_id, phenolist -> phenolist }
+        // Resolve globs eagerly: `combine` against a `.toList()` channel spreads
+        // the list across tuple positions, which breaks closure destructuring.
+        def all_regenie_files = file("${params.step2_results}/*.regenie.gz")
+        def all_sex_files     = file("${params.step2_results}/*.sex_spec.gz")
+        // Carry the pheno-chunk_id alongside each pheno so we only pick shards
+        // produced by *this* pheno's chunk. step2_results may contain leftovers
+        // from prior runs that grouped phenos differently — without chunk_id,
+        // the same pheno can match multiple unrelated shard sets.
+        phenos_with_chunk = pheno_chunks_ch
+            .flatMap { chunk_id, phenolist -> phenolist.collect { pheno -> tuple(chunk_id, pheno) } }
 
-        regenie_by_pheno = phenos_flat
-            .combine(all_regenie_ch)
-            .map { pheno, files ->
-                def matched = files.findAll { it.getName().endsWith("_${pheno}.regenie.gz") }
-                tuple(pheno, matched)
+        regenie_by_pheno = phenos_with_chunk.map { chunk_id, pheno ->
+            def chunk_tag = ".${chunk_id}."
+            def suffix    = "_${pheno}.regenie.gz"
+            def matched = all_regenie_files.findAll { f ->
+                def n = f.getName()
+                n.contains(chunk_tag) && n.endsWith(suffix)
             }
+            tuple(pheno, matched)
+        }
 
-        sex_by_pheno = phenos_flat
-            .combine(all_sex_ch)
-            .map { pheno, files ->
-                def matched = files.findAll { f ->
-                    def n = f.getName()
-                    n.endsWith(".${pheno}.sex_spec.gz") || n.contains('NOT_DONE')
-                }
-                tuple(pheno, matched)
+        sex_by_pheno = phenos_with_chunk.map { chunk_id, pheno ->
+            def chunk_tag = ".${chunk_id}."
+            def suffix    = ".${pheno}.sex_spec.gz"
+            def matched = all_sex_files.findAll { f ->
+                def n = f.getName()
+                n.contains(chunk_tag) && (n.endsWith(suffix) || n.contains('NOT_DONE'))
             }
+            tuple(pheno, matched)
+        }
     } else {
         // Cartesian product: (pheno chunk) × (genotype chunk), plus cov_pheno.
         step2_input_ch = step1_resolved
@@ -174,11 +185,23 @@ workflow {
             }
     }
 
-    gather_input = regenie_by_pheno
+    // Drop phenos with an incomplete set of STEP2 shards — better to omit a
+    // pheno's GATHER output entirely than silently publish genome-wide stats
+    // that are missing some chromosomes.
+    gather_branched = regenie_by_pheno
         .join(sex_by_pheno, remainder: true)
-        .map { pheno, regs, sexes ->
-            tuple(pheno, regs ?: [], sexes ?: [])
+        .branch { pheno, regs, sexes ->
+            full:    (regs ?: []).size() == n_geno
+            partial: true
         }
+
+    gather_branched.partial.subscribe { row ->
+        def (pheno, regs, _sexes) = row
+        log.warn "Dropping pheno '${pheno}' from GATHER: ${(regs ?: []).size()}/${n_geno} STEP2 shards present (incomplete genome-wide result)."
+    }
+
+    gather_input = gather_branched.full
+        .map { pheno, regs, sexes -> tuple(pheno, regs ?: [], sexes ?: []) }
 
     GATHER(gather_input)
 

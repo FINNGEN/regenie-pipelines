@@ -8,7 +8,7 @@ process CODING_GATHER {
 
     cpus   1
     memory 2.GB
-    disk   '20 GB'
+    disk   20.GB, type: 'pd-standard'
 
     publishDir "${params.outdir}", mode: 'copy', pattern: 'coding_variants.txt.gz'
 

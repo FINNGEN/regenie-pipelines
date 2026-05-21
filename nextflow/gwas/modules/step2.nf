@@ -10,7 +10,7 @@ process STEP2 {
 
     cpus   { params.step2_resource_profile == 'fixed' ? 1 : (phenolist.size() == 1 ? 1 : (phenolist.size() <= 4 ? 2 : (phenolist.size() <= 10 ? 4 : (phenolist.size() < 16 ? 8 : 16)))) }
     memory { params.step2_resource_profile == 'fixed' ? 6.GB : (phenolist.size() <= 2 ? 4.GB : 6.GB) }
-    disk   '200 GB'
+    disk   200.GB, type: 'pd-standard'
 
     publishDir "${params.outdir}/step2", mode: 'copy', pattern: '*.regenie.gz'
     publishDir "${params.outdir}/step2", mode: 'copy', pattern: '*.sex_spec.gz'

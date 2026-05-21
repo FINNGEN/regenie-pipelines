@@ -8,7 +8,7 @@ process SUMMARY {
 
     cpus   1
     memory 2.GB
-    disk   '200 GB'
+    disk   200.GB, type: 'pd-standard'
 
     publishDir "${params.outdir}/summary", mode: 'copy', pattern: '*_summary.txt'
     publishDir "${params.outdir}/coding",  mode: 'copy', pattern: '*_coding.txt'
