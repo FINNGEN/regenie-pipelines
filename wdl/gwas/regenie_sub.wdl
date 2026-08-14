@@ -16,6 +16,7 @@ task step2 {
     Array[File] loco
     Array[File] nulls
     Int bsize
+    Int minmac = 5
     String options
 
     String docker
@@ -58,6 +59,7 @@ task step2 {
         ${if is_binary then "--use-null-firth ${firth_list}" else ""} \
         --bsize ${bsize} \
         --threads $n_cpu \
+        --minMAC ${minmac} \
         --gz \
         --out ${prefix} \
         ${options}
@@ -168,6 +170,7 @@ task step2 {
               --pred ${pred} \
               --bsize ${bsize} \
               --threads $n_cpu \
+              --minMAC ${minmac} \
               --gz \
               --out ${prefix}".sex_spec."$s \
               ${options}
@@ -507,12 +510,13 @@ workflow regenie_step2 {
 
     Boolean is_single_sex
     Boolean run_sex_specific
+    Int minmac = 5
 
     scatter (bgen in bgens) {
         call step2 {
             input: docker=docker, phenolist=phenolist, is_binary=is_binary, cov_pheno=cov_pheno,
               covariates=covariates, pred=pred, loco=loco, nulls=nulls,firth_list=firth_list,bgen=bgen,
-              sex_col_name=sex_col_name, run_sex_specific=(run_sex_specific && !is_single_sex)
+              sex_col_name=sex_col_name, run_sex_specific=(run_sex_specific && !is_single_sex), minmac=minmac
         }
     }
 
