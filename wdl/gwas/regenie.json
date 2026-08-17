@@ -1,5 +1,5 @@
 {
-    "regenie.sub_step1.step1.docker": "eu.gcr.io/finngen-refinery-dev/regenie:v2.2.4.fixed.gz.mkl",
+    "regenie.sub_step1.docker": "eu.gcr.io/finngen-refinery-dev/regenie:v2.2.4.fixed.gz.mkl",
     "regenie.sub_step2.docker": "eu.gcr.io/finngen-refinery-dev/regenie:v2.2.4.fixed.gz.mkl",
 
     "regenie.phenolist": "gs://path/to/phenolist",
@@ -9,8 +9,9 @@
 
     "regenie.auto_remove_sex_covar": true,
     "regenie.sex_col_name": "SEX_IMPUTED",
+    "regenie.minmac":5,
 
-    "regenie.sub_step2.step2.run_sex_specific": true,
+    "regenie.sub_step2.run_sex_specific": true,
     "regenie.sub_step2.step2.sex_specific_logpval": 1.623249,
 
     "regenie.sub_step1.step1.covariate_inclusion_threshold": 10,
@@ -27,7 +28,6 @@
 
     "regenie.sub_step2.summary.docker": "eu.gcr.io/finngen-refinery-dev/saige:0.39.1-fg-pysam",
     "regenie.sub_step2.summary.finngen_annotation": "gs://r7_data/annotations/R7_annotated_variants_v0.gz",
-    "regenie.sub_step2.summary.gnomad_annotation": "gs://r4_data_west1/gnomad_functional_variants/fin_enriched_genomes_select_columns.txt.gz",
     "regenie.sub_step2.summary.summary_pval_thresh": 1e-6,
     "regenie.sub_step2.summary.coding_pval_thresh": 1e-4,
 
