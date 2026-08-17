@@ -43,9 +43,17 @@ def regenie_run(args,step,bgen,sample_file,pheno_file,covariates,condition_list,
         args.force = True
 
         #build pred
-        pred_file = os.path.join(args.tmp_dir, f"{args.basename}_{args.pheno}.pred")                            
+        pred_file = os.path.join(args.tmp_dir, f"{args.basename}_{args.pheno}.pred")
         with open(pred_file,'wt') as o: o.write(f"{pheno}\t{null_file}")
-   
+
+        # build null-firth list (2-column "pheno path" format regenie expects, see Step2_Models.cpp print_null_firth_info).
+        # args.firth_file may be an empty placeholder (0 bytes) when there's nothing to use -- skip --use-null-firth in that case.
+        firth_params = ''
+        if args.firth_file and os.path.getsize(args.firth_file) > 0:
+            firth_list_file = os.path.join(args.tmp_dir, f"{args.basename}_{args.pheno}.firth_list")
+            with open(firth_list_file,'wt') as o: o.write(f"{pheno} {args.firth_file}")
+            firth_params = f' --use-null-firth {firth_list_file}'
+
         # build condition file
         tmp_variant = os.path.join(args.tmp_dir, f"{args.basename}_variant.tmp")
         with open(tmp_variant,'wt') as o:
@@ -55,7 +63,7 @@ def regenie_run(args,step,bgen,sample_file,pheno_file,covariates,condition_list,
         # add sample file if passed
         sample_cmd = f" --sample {sample_file}"  if os.path.isfile(sample_file)  else ""
         
-        cmd = f'{regenie_cmd} --step 2   {params} --bgen {bgen}  {sample_cmd} --out {os.path.join(args.tmp_dir,args.basename)}  --pred {pred_file} --phenoFile {pheno_file} --phenoCol {pheno} --condition-list {tmp_variant} {region}  --covarFile {pheno_file} --covarColList {covariates} --threads {threads}'
+        cmd = f'{regenie_cmd} --step 2   {params}{firth_params} --bgen {bgen}  {sample_cmd} --out {os.path.join(args.tmp_dir,args.basename)}  --pred {pred_file} --phenoFile {pheno_file} --phenoCol {pheno} --condition-list {tmp_variant} {region}  --covarFile {pheno_file} --covarColList {covariates} --threads {threads}'
         logging.debug(cmd)
         logmode = 'wt' if step == 0 else 'a'
         with open(log_file,logmode) as o:
@@ -189,6 +197,7 @@ if __name__ == '__main__':
     parser.add_argument('--sumstats',type = file_exists,help ='Path to original sumstats',required=True)
     parser.add_argument('--regenie-params',type=str,help ='extra bgen params',default = ' --bt --bsize 200 --ref-first' )
     parser.add_argument('--null-file',type = file_exists,help ='File with null info.',required=True)
+    parser.add_argument('--firth-file',type = file_exists,help ='Path to this pheno\'s null-firth estimates file. May be an empty placeholder (0 bytes), in which case --use-null-firth is skipped.',required=False)
     parser.add_argument('--force',action = 'store_true',help = 'Flag for forcing re-run.')
     parser.add_argument( "-log",  "--log",  default="warning", choices = log_levels, help=(  "Provide logging level. " "Example --log debug', default='warning'"))
     parser.add_argument('--max-steps',type = int,default =10)

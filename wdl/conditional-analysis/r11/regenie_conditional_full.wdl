@@ -7,8 +7,6 @@ workflow conditional_analysis {
     File phenos_to_cond
     String release
     Boolean test
-    Boolean is_binary
-    String firth_root
     String mlogp_col
     String chr_col
     String pos_col
@@ -24,11 +22,9 @@ workflow conditional_analysis {
   }
 
   String prefix = "finngen_R" + release
-  # in test mode, cut down to the first 10 phenos before the expensive per-pheno scatter, not just at region-pooling time
-  Array[String] all_pheno_data = read_lines(phenos_to_cond)
-  Array[String] pheno_data = if test && length(all_pheno_data) > 10 then [all_pheno_data[0],all_pheno_data[1],all_pheno_data[2],all_pheno_data[3],all_pheno_data[4],all_pheno_data[5],all_pheno_data[6],all_pheno_data[7],all_pheno_data[8],all_pheno_data[9]] else all_pheno_data
   # returns covariate string for each pheno
-  call filter_covariates {input: docker=docker,pheno_file=pheno_file,pheno_list = write_lines(pheno_data),covariates=covariates}
+  call filter_covariates {input: docker=docker,pheno_file=pheno_file,pheno_list = phenos_to_cond,covariates=covariates}  
+  Array[String] pheno_data = read_lines(phenos_to_cond)
   # go through phenos
   scatter (p in pheno_data) {
     #get hits under pval threshold
@@ -49,14 +45,9 @@ workflow conditional_analysis {
      String chrom = region[1]
      String region_limits = region[2] 
      String locus = region[3]
-
-     if (is_binary) {
-       File region_firth_list = sub(firth_root,"PHENO",pheno)
-     }
-
     call regenie_conditional {
-       input: docker = docker, prefix=prefix,locus=locus,region=region_limits,pheno=pheno,chrom=chrom,covariates = cov_map[pheno],mlogp_col = mlogp_col,chr_col=chr_col,pos_col = pos_col,ref_col=ref_col,alt_col=alt_col,pval_threshold=conditioning_mlogp_threshold,sumstats_root=sumstats_root,pheno_file=pheno_file,is_binary=is_binary,firth_list=region_firth_list
-     }
+       input: docker = docker, prefix=prefix,locus=locus,region=region_limits,pheno=pheno,chrom=chrom,covariates = cov_map[pheno],mlogp_col = mlogp_col,chr_col=chr_col,pos_col = pos_col,ref_col=ref_col,alt_col=alt_col,pval_threshold=conditioning_mlogp_threshold,sumstats_root=sumstats_root,pheno_file=pheno_file
+     }    
    }
 
    Array[File] results = flatten(regenie_conditional.conditional_chains)
@@ -136,7 +127,6 @@ task regenie_conditional {
     File pheno_file
     String bgen_root
     String null_root
-    File? firth_list
     String sumstats_root
     # column names and stuff
     String chr_col
@@ -150,9 +140,7 @@ task regenie_conditional {
     Float pval_threshold
     Int max_steps
     String covariates
-    Boolean is_binary
-    String regenie_params_binary
-    String regenie_params_qt
+    String? regenie_params
     Int cpus
   }
 
@@ -164,8 +152,6 @@ task regenie_conditional {
   File bgen_sample = bgen + ".sample"
   File bgen_index = bgen + ".bgi"
 
-  # is_binary picks which json-supplied param string applies
-  String selected_params = if is_binary then regenie_params_binary else regenie_params_qt
 
   # runtime params based on file sizes
   Int disk_size = 120
@@ -174,21 +160,15 @@ task regenie_conditional {
 
   command <<<
     
-    echo ~{pheno} ~{chrom} ~{cpus}
+    echo ~{pheno} ~{chrom} ~{cpus} 
     tabix -h ~{sumstats}  ~{region} > region_sumstats.txt
-
-    FIRTH_FILE="~{if defined(firth_list) then firth_list else ''}"
-    if [[ -z "$FIRTH_FILE" ]]; then
-      touch ./dummy_firth
-      FIRTH_FILE="./dummy_firth"
-    fi
 
     python3 /scripts/regenie_conditional.py \
     --out ./~{prefix}  --bgen ~{bgen}  --null-file ~{null}  --sumstats region_sumstats.txt \
     --pheno-file ~{pheno_file} --pheno ~{pheno} \
     --locus-region ~{locus} ~{region}  --pval-threshold ~{pval_threshold} --max-steps ~{max_steps} \
     --chr-col ~{chr_col} --pos-col ~{pos_col} --ref-col ~{ref_col} --alt-col ~{alt_col} --mlogp-col ~{mlogp_col} --beta-col ~{beta} --sebeta-col ~{sebeta} \
-    --covariates ~{covariates} --regenie-params "~{selected_params}" --firth-file "$FIRTH_FILE" --log info
+    --covariates ~{covariates} ~{if defined(regenie_params) then " --regenie-params " + regenie_params else ""} --log info
 
   >>>
   output {
@@ -345,7 +325,7 @@ task merge_regions {
     String docker
     Boolean test
   }
-
+  
   String outfile = "regions.txt"
   command <<<
   while read f; do cat $f >> tmp.txt; done <  ~{write_lines(hits)}

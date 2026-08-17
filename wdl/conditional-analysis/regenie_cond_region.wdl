@@ -6,6 +6,8 @@ workflow conditional_analysis {
     File cond_regions
     String pheno
     String prefix
+    Boolean is_binary
+    String firth_root
     String mlogp_col
     String chr_col
     String pos_col
@@ -26,6 +28,11 @@ workflow conditional_analysis {
     String chrom = entry[0]
     String locus_range = entry[0] + ":" + entry[1]
     String locus = entry[2]
+
+    if (is_binary) {
+      File region_firth_list = sub(firth_root,"PHENO",pheno)
+    }
+
     call regenie_conditional {
       input:
       docker = docker,
@@ -33,8 +40,8 @@ workflow conditional_analysis {
       locus=locus,
       region=locus_range,
       pheno=pheno,chrom=chrom,
-      covariates = cov_map[pheno],mlogp_col = mlogp_col,chr_col=chr_col,pos_col = pos_col,ref_col=ref_col,alt_col=alt_col,pval_threshold=conditioning_mlogp_threshold,sumstats_root=sumstats_root,pheno_file=pheno_file
-      }    
+      covariates = cov_map[pheno],mlogp_col = mlogp_col,chr_col=chr_col,pos_col = pos_col,ref_col=ref_col,alt_col=alt_col,pval_threshold=conditioning_mlogp_threshold,sumstats_root=sumstats_root,pheno_file=pheno_file,is_binary=is_binary,firth_list=region_firth_list
+      }
    }
 }
 
@@ -55,6 +62,7 @@ task regenie_conditional {
     File pheno_file
     String bgen_root
     String null_root
+    File? firth_list
     String sumstats_root
     # column names and stuff
     String chr_col
@@ -68,7 +76,9 @@ task regenie_conditional {
     Float pval_threshold
     Int max_steps
     String covariates
-    String? regenie_params
+    Boolean is_binary
+    String regenie_params_binary
+    String regenie_params_qt
     Int cpus
   }
 
@@ -80,6 +90,8 @@ task regenie_conditional {
   File bgen_sample = bgen + ".sample"
   File bgen_index = bgen + ".bgi"
 
+  # is_binary picks which json-supplied param string applies
+  String selected_params = if is_binary then regenie_params_binary else regenie_params_qt
 
   # runtime params based on file sizes
   Int disk_size = ceil(size(bgen,'GB')) + ceil(size(sumstats,'GB')) + ceil(size(null,'GB')) + ceil(size(pheno_file,'GB')) + 1
@@ -88,15 +100,21 @@ task regenie_conditional {
 
   command <<<
     
-    echo ~{pheno} ~{chrom} ~{cpus} 
+    echo ~{pheno} ~{chrom} ~{cpus}
     tabix -h ~{sumstats}  ~{region} > region_sumstats.txt
+
+    FIRTH_FILE="~{if defined(firth_list) then firth_list else ''}"
+    if [[ -z "$FIRTH_FILE" ]]; then
+      touch ./dummy_firth
+      FIRTH_FILE="./dummy_firth"
+    fi
 
     python3 /scripts/regenie_conditional.py \
     --out ./~{prefix}  --bgen ~{bgen}  --null-file ~{null}  --sumstats region_sumstats.txt \
     --pheno-file ~{pheno_file} --pheno ~{pheno} \
     --locus-region ~{locus} ~{region}  --pval-threshold ~{pval_threshold} --max-steps ~{max_steps} \
     --chr-col ~{chr_col} --pos-col ~{pos_col} --ref-col ~{ref_col} --alt-col ~{alt_col} --mlogp-col ~{mlogp_col} --beta-col ~{beta} --sebeta-col ~{sebeta} \
-    --covariates ~{covariates} ~{if defined(regenie_params) then " --regenie-params " + regenie_params else ""} --log info
+    --covariates ~{covariates} --regenie-params "~{selected_params}" --firth-file "$FIRTH_FILE" --log info
 
   >>>
   output {
