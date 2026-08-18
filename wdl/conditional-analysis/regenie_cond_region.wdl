@@ -18,12 +18,12 @@ workflow conditional_analysis {
     String sumstats_root
   }
 
-  String docker = "eu.gcr.io/finngen-refinery-dev/regenie:3.3_cond_region"
-  call filter_covariates {input: docker=docker,pheno_file=pheno_file,pheno_list = write_lines([pheno]),covariates=covariates}
+  String docker = "eu.gcr.io/finngen-sandbox-v3-containers/regenie:4.1.2_firth_cond"
+  call filter_covariates {input: pheno_file=pheno_file,pheno_list=write_lines([pheno]),covariates=covariates}
   Map[String,String] cov_map = read_map(filter_covariates.cov_pheno_map)
 
   # automatic is_binary detection: column contains only 0/1/NA -> binary, no manual flag needed
-  call check_is_binary {input: docker=docker,pheno_file=pheno_file,pheno_list = write_lines([pheno])}
+  call check_is_binary {input: pheno_file=pheno_file,pheno_list=write_lines([pheno])}
   Map[String,String] is_binary_map = read_map(check_is_binary.is_binary_tsv)
   Boolean pheno_is_binary = is_binary_map[pheno] == "1"
 
@@ -38,20 +38,13 @@ workflow conditional_analysis {
     }
 
     call regenie_conditional {
-      input:
-      docker = docker,
-      prefix=prefix,
-      locus=locus,
-      region=locus_range,
-      pheno=pheno,chrom=chrom,
-      covariates = cov_map[pheno],mlogp_col = mlogp_col,chr_col=chr_col,pos_col = pos_col,ref_col=ref_col,alt_col=alt_col,pval_threshold=conditioning_mlogp_threshold,sumstats_root=sumstats_root,pheno_file=pheno_file,is_binary=pheno_is_binary,firth_list=region_firth_list
-      }
-   }
+      input: docker=docker,prefix=prefix,locus=locus,region=locus_range,pheno=pheno,chrom=chrom,covariates=cov_map[pheno],mlogp_col=mlogp_col,chr_col=chr_col,pos_col=pos_col,ref_col=ref_col,alt_col=alt_col,pval_threshold=conditioning_mlogp_threshold,sumstats_root=sumstats_root,pheno_file=pheno_file,is_binary=pheno_is_binary,firth_list=region_firth_list
+    }
+  }
 }
 
-
 task regenie_conditional {
-  
+
   input {
     # GENERAL PARAMS
     String? regenie_docker
@@ -62,7 +55,7 @@ task regenie_conditional {
     String region
     String pheno
     String chrom
-    # files to localize 
+    # files to localize
     File pheno_file
     String bgen_root
     String null_root
@@ -89,7 +82,7 @@ task regenie_conditional {
   # localize all files based on roots and pheno/chrom info
   File sumstats = sub(sumstats_root,"PHENO",pheno)
   File sum_tabix = sumstats + ".tbi"
-  File null =sub(null_root,"PHENO",pheno)
+  File null = sub(null_root,"PHENO",pheno)
   File bgen = sub(bgen_root,'CHROM',chrom)
   File bgen_sample = bgen + ".sample"
   File bgen_index = bgen + ".bgi"
@@ -101,11 +94,9 @@ task regenie_conditional {
   Int disk_size = ceil(size(bgen,'GB')) + ceil(size(sumstats,'GB')) + ceil(size(null,'GB')) + ceil(size(pheno_file,'GB')) + 1
   String final_docker = if defined(regenie_docker) then regenie_docker else docker
 
-
   command <<<
-    
     echo ~{pheno} ~{chrom} ~{cpus}
-    tabix -h ~{sumstats}  ~{region} > region_sumstats.txt
+    tabix -h ~{sumstats} ~{region} > region_sumstats.txt
 
     FIRTH_FILE="~{if defined(firth_list) then firth_list else ''}"
     if [[ -z "$FIRTH_FILE" ]]; then
@@ -114,38 +105,31 @@ task regenie_conditional {
     fi
 
     python3 /scripts/regenie_conditional.py \
-    --out ./~{prefix}  --bgen ~{bgen}  --null-file ~{null}  --sumstats region_sumstats.txt \
+    --out ./~{prefix} --bgen ~{bgen} --null-file ~{null} --sumstats region_sumstats.txt \
     --pheno-file ~{pheno_file} --pheno ~{pheno} \
-    --locus-region ~{locus} ~{region}  --pval-threshold ~{pval_threshold} --max-steps ~{max_steps} \
+    --locus-region ~{locus} ~{region} --pval-threshold ~{pval_threshold} --max-steps ~{max_steps} \
     --chr-col ~{chr_col} --pos-col ~{pos_col} --ref-col ~{ref_col} --alt-col ~{alt_col} --mlogp-col ~{mlogp_col} --beta-col ~{beta} --sebeta-col ~{sebeta} \
     --covariates ~{covariates} --regenie-params "~{selected_params}" --firth-file "$FIRTH_FILE" --log info
-
   >>>
+
   output {
     Array[File] conditional_chains = glob("./${prefix}*.snps")
     Array[File] logs = glob("./${prefix}*.log")
-    Array[File] regenie_output = glob("./${prefix}*.conditional")    
+    Array[File] regenie_output = glob("./${prefix}*.conditional")
   }
-  
+
   runtime {
     cpu: "~{cpus}"
     docker: "${final_docker}"
-    memory: "4 GB"
     disks: "local-disk ${disk_size} HDD"
-    zones: "europe-west1-b europe-west1-c europe-west1-d"
-    preemptible: "1"
-  
   }
-  
 }
-
 
 task check_is_binary {
 
   input {
     File pheno_file
     File pheno_list
-    String docker
   }
 
   Int disk_size = ceil(size(pheno_file,'GB')) + 2 * 2
@@ -189,15 +173,9 @@ task check_is_binary {
   }
 
   runtime {
-    cpu: "1"
-    docker: "${docker}"
-    memory: "4 GB"
     disks: "local-disk ${disk_size} HDD"
-    zones: "europe-west1-b europe-west1-c europe-west1-d"
-    preemptible: "1"
   }
 }
-
 
 task filter_covariates {
 
@@ -205,74 +183,64 @@ task filter_covariates {
     File pheno_file
     Array[String] covariates
     File pheno_list
-    String docker
     Int threshold_cov_count
-    }
-
-    String outfile = "./pheno_cov_map_" + threshold_cov_count + ".txt"
-    Int disk_size = ceil(size(pheno_file,'GB')) + 2 * 2
-    
-    command <<<
-
-      set -euxo pipefail
-      
-      python3 <<CODE
-      
-      import pandas as pd
-      import numpy as np
-      
-      #read in phenos as list of phenos regardless
-      tot_phenos = []
-      phenos_groups = []
-      with open('~{pheno_list}') as i:
-          for line in i:
-              phenos = line.strip().split()
-              phenos_groups.append(phenos)
-              tot_phenos += phenos    
-
-      #read in phenos mapping all valid entries to 1 and NAs to 0
-      pheno_df= pd.read_csv('~{pheno_file}',sep='\t',usecols=tot_phenos).notna().astype(int)
-      print(pheno_df)
-      # read in covariates getting absolute values (handles PCs)
-      covariates= '~{sep="," covariates}'.split(',')
-      cov_df= pd.read_csv('~{pheno_file}',sep='\t',usecols=covariates).abs()
-      print(cov_df)
-
-      # now for each pheno calculate product of each covariate with itself
-      
-      with open('~{outfile}','wt') as o,open('~{outfile}'.replace('.txt','.err.txt'),'wt') as tmp_err:
-          for i,pheno_list in enumerate(phenos_groups):
-              pheno_name = ','.join(pheno_list)
-              # for each group of phenos (possibly a single one) multiply all covs and pheno column and count how many non 0 entries are there: this means that the entry has a valid pheno and a non null covariates.
-              df = pd.DataFrame()
-              for pheno in pheno_list:
-                  m = (cov_df.mul(pheno_df[pheno],0)>0).sum().to_frame(pheno)
-                  df = pd.concat([df,m],axis =1)
-
-              print(f"{i+1}/{len(phenos_groups)} {pheno_name}")
-              #If it's a group of phenos the min function will return the lowest count across all phenos
-              tmp_df = df[pheno_list].min(axis =1)
-              covs = tmp_df.index[tmp_df >= ~{threshold_cov_count}].tolist()
-              missing_covs = [elem for elem in covariates if elem not in covs]
-              if missing_covs:tmp_err.write(f"{pheno_name}\t{','.join(missing_covs)}\n")
-              o.write(f"{pheno_name}\t{','.join(covs)}\n")
-      
-      CODE
-
-    >>>
-      output {
-	File cov_pheno_map = outfile
-	File cov_pheno_warning = sub(outfile,'.txt','.err.txt')
-      }
-  
-  runtime {
-    cpu: "1"
-    docker: "${docker}"
-    memory: "64 GB"
-    disks: "local-disk ${disk_size} HDD"
-    zones: "europe-west1-b europe-west1-c europe-west1-d"
-    preemptible: "1"
   }
 
-}
+  String outfile = "./pheno_cov_map_" + threshold_cov_count + ".txt"
+  Int disk_size = ceil(size(pheno_file,'GB')) + 2 * 2
 
+  command <<<
+    set -euxo pipefail
+
+    python3 <<CODE
+    import pandas as pd
+    import numpy as np
+
+    #read in phenos as list of phenos regardless
+    tot_phenos = []
+    phenos_groups = []
+    with open('~{pheno_list}') as i:
+        for line in i:
+            phenos = line.strip().split()
+            phenos_groups.append(phenos)
+            tot_phenos += phenos
+
+    #read in phenos mapping all valid entries to 1 and NAs to 0
+    pheno_df = pd.read_csv('~{pheno_file}',sep='\t',usecols=tot_phenos).notna().astype(int)
+    print(pheno_df)
+    # read in covariates getting absolute values (handles PCs)
+    covariates = '~{sep="," covariates}'.split(',')
+    cov_df = pd.read_csv('~{pheno_file}',sep='\t',usecols=covariates).abs()
+    print(cov_df)
+
+    # now for each pheno calculate product of each covariate with itself
+
+    with open('~{outfile}','wt') as o,open('~{outfile}'.replace('.txt','.err.txt'),'wt') as tmp_err:
+        for i,pheno_list in enumerate(phenos_groups):
+            pheno_name = ','.join(pheno_list)
+            # for each group of phenos (possibly a single one) multiply all covs and pheno column and count how many non 0 entries are there: this means that the entry has a valid pheno and a non null covariates.
+            df = pd.DataFrame()
+            for pheno in pheno_list:
+                m = (cov_df.mul(pheno_df[pheno],0)>0).sum().to_frame(pheno)
+                df = pd.concat([df,m],axis=1)
+
+            print(f"{i+1}/{len(phenos_groups)} {pheno_name}")
+            #If it's a group of phenos the min function will return the lowest count across all phenos
+            tmp_df = df[pheno_list].min(axis=1)
+            covs = tmp_df.index[tmp_df >= ~{threshold_cov_count}].tolist()
+            missing_covs = [elem for elem in covariates if elem not in covs]
+            if missing_covs: tmp_err.write(f"{pheno_name}\t{','.join(missing_covs)}\n")
+            o.write(f"{pheno_name}\t{','.join(covs)}\n")
+    CODE
+  >>>
+
+  output {
+    File cov_pheno_map = outfile
+    File cov_pheno_warning = sub(outfile,'.txt','.err.txt')
+  }
+
+  runtime {
+    memory: "64 GB"
+    disks: "local-disk ${disk_size} HDD"
+  }
+}
