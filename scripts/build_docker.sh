@@ -1,20 +1,20 @@
 #!/bin/bash
+set -u
 
 usage() {
   echo "Usage: $0 --version <finngen_tag> [--image <name>] [--push] [--registry refinery|sandbox] [--base-regenie-docker <image>]"
   echo "  --version              required. Suffix appended to regenie's own VERSION file to build the pushed tag (e.g. cond_firth)"
   echo "  --image                image name (default: regenie)"
-  echo "  --push                 push the built image after a successful build (default: build only, no push)"
+  echo "  --push                 also push the finngen image after a successful build (the bare regenie image is always pushed)"
   echo "  --registry             refinery or sandbox (default: sandbox)"
-  echo "  --base-regenie-docker  use this pre-built image instead of building regenie from scratch (default: blank, i.e. build from scratch)"
+  echo "  --base-regenie-docker  use this pre-built image instead of building regenie from scratch"
   exit 1
 }
 
-IMAGE="regenie"
-FINNGEN_TAG=""
-PUSH=false
-REGISTRY="sandbox"
-BASE_REGENIE_DOCKER=""
+die() { echo "$*" >&2; exit 1; }
+run() { "$@" || die "failed: $*"; }
+
+IMAGE="regenie"; FINNGEN_TAG=""; PUSH=false; REGISTRY="sandbox"; BASE_REGENIE_DOCKER=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -29,112 +29,72 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -z "$FINNGEN_TAG" ]] && { echo "--version is required" >&2; usage; }
-if [[ "$REGISTRY" != "refinery" && "$REGISTRY" != "sandbox" ]]; then
-  echo "--registry must be 'refinery' or 'sandbox'" >&2
-  usage
-fi
+[[ "$REGISTRY" == "refinery" || "$REGISTRY" == "sandbox" ]] || { echo "--registry must be 'refinery' or 'sandbox'" >&2; usage; }
 
-# Registry path constants
 REFINERY_PATH="europe-west1-docker.pkg.dev/finngen-refinery-dev/fg-refinery-registry/"
 SB_PATH="eu.gcr.io/finngen-sandbox-v3-containers/"
+[[ "$REGISTRY" == "sandbox" ]] && REPO="${SB_PATH}${IMAGE}" || REPO="${REFINERY_PATH}${IMAGE}"
 
-BASE_PATH="$REFINERY_PATH"
-[[ "$REGISTRY" == "sandbox" ]] && BASE_PATH="$SB_PATH"
-REPO="${BASE_PATH}${IMAGE}"
-
-#change directory to parent of this script so docker file can always be found without having to worry from which path you launch the script
+# repo root, so the build context is found regardless of launch dir
 APP_ROOT="$(dirname "$(dirname "$(readlink -fm "$0")")")"
-cd $APP_ROOT
+cd "$APP_ROOT"
 
-## which htslib version to use for tabix etc.
 HTSLIB_VER=1.14
-
-# BASE_REGENIE_DOCKER is set from --base-regenie-docker above; blank (the default) builds regenie from scratch
-
-# only re-clone if local master doesn't match upstream master -- avoids re-cloning on every run while
-# still catching the actual bug that started this: git silently no-op'ing on an existing directory
-# (fatal: destination path already exists) left a 2+ year stale source tree with nothing catching it.
-# Checked unconditionally (even when --base-regenie-docker skips the from-scratch build below) since
-# TAG is always derived from regenie's own VERSION file.
-# Note: this directory lives under the Dropbox-synced repo path. If Dropbox's sync daemon is actively
-# touching it (observed once as multi-minute hangs on plain git/rm operations here), a re-clone below
-# may hang too -- if that happens, pause Dropbox sync (or set up selective sync excluding this path).
 REGENIE_SRC_DIR="$APP_ROOT/regenie"
 REGENIE_REPO_URL="https://github.com/rgcgithub/regenie.git"
 
+# re-clone only if stale (a plain `git clone` into an existing dir silently no-ops otherwise)
 REMOTE_HASH=$(git ls-remote "$REGENIE_REPO_URL" HEAD | cut -f1)
-if [[ -z "$REMOTE_HASH" ]]; then
-  echo "Could not reach $REGENIE_REPO_URL to check for updates -- not attempting the build" >&2
-  exit 1
-fi
-
+[[ -n "$REMOTE_HASH" ]] || die "could not reach $REGENIE_REPO_URL to check for updates"
 LOCAL_HASH=""
 [[ -d "$REGENIE_SRC_DIR/.git" ]] && LOCAL_HASH=$(git -C "$REGENIE_SRC_DIR" rev-parse HEAD 2>/dev/null)
-
-if [[ "$LOCAL_HASH" == "$REMOTE_HASH" ]]; then
-  echo "Local regenie clone already at latest master ($REMOTE_HASH), skipping re-clone"
-else
-  echo "Local regenie clone stale or missing (local=${LOCAL_HASH:-none}, remote=$REMOTE_HASH) -- re-cloning into $REGENIE_SRC_DIR ..."
+if [[ "$LOCAL_HASH" != "$REMOTE_HASH" ]]; then
+  echo "regenie clone stale or missing (local=${LOCAL_HASH:-none}, remote=$REMOTE_HASH) -- re-cloning"
   rm -rf "$REGENIE_SRC_DIR"
-  git clone "$REGENIE_REPO_URL" "$REGENIE_SRC_DIR"
-  if [[ $? -ne 0 ]]; then
-    echo "git clone failed -- not attempting the build" >&2
-    exit 1
-  fi
+  run git clone "$REGENIE_REPO_URL" "$REGENIE_SRC_DIR"
+else
+  echo "regenie clone already at latest master ($REMOTE_HASH)"
 fi
 cd "$REGENIE_SRC_DIR"
 
-#optional
-## uses master by default but comment out to use specific version
-#git checkout c1daf24
+TAG="$(cat VERSION)_${FINNGEN_TAG}"
 
-TAG=$(cat VERSION)"_"$FINNGEN_TAG
+# if the expected bare-regenie tag already exists remotely, offer to skip rebuilding it entirely
+if [[ -z "$BASE_REGENIE_DOCKER" ]]; then
+  EXPECTED_TAG="$REPO:v$(cat VERSION).gz"
+  if docker manifest inspect "$EXPECTED_TAG" >/dev/null 2>&1; then
+    read -r -p "$EXPECTED_TAG already exists remotely -- rebuild it anyway? [y/N] " REPLY
+    [[ "$REPLY" =~ ^[Yy]$ ]] || BASE_REGENIE_DOCKER="$EXPECTED_TAG"
+  fi
+fi
 
 if [[ -z "$BASE_REGENIE_DOCKER" ]]; then
-  IMG_NAME=regenie:v$(cat VERSION)".gz"
-  echo "Building base regenie version " $(cat VERSION)
-  make docker-build MKLROOT=1 STATIC=1 HAS_BOOST_IOSTREAM=1
-  if [[ $? -ne 0 ]]; then
-    echo "make docker-build failed -- not attempting the finngen layer build" >&2
-    exit 1
-  fi
+  IMG_NAME="regenie:v$(cat VERSION).gz"
+  echo "Building base regenie $(cat VERSION)"
+  run make docker-build MKLROOT=1 STATIC=1 HAS_BOOST_IOSTREAM=1
 
-  # give the bare regenie image its own registry-qualified tag (same tag portion as IMG_NAME, e.g.
-  # v4.1.2.gz), separate from the finngen image's tag below -- so it can be pushed/reused directly
-  # (e.g. via --base-regenie-docker) without needing to hand-tag it after the fact
+  # own tag, pushed immediately, so --base-regenie-docker can reuse it and the finngen build below never overwrites it
   BARE_TAG="$REPO:${IMG_NAME#*:}"
-  docker tag $IMG_NAME $BARE_TAG
-  echo "Pushing bare regenie image to $BARE_TAG"
-  docker push $BARE_TAG
+  run docker tag "$IMG_NAME" "$BARE_TAG"
+  run docker push "$BARE_TAG"
 else
-  echo "Skipping building base regenie and using $BASE_REGENIE_DOCKER"
-  IMG_NAME=$BASE_REGENIE_DOCKER
+  echo "Using existing base image $BASE_REGENIE_DOCKER"
+  IMG_NAME="$BASE_REGENIE_DOCKER"
 fi
 
 cd "$APP_ROOT"
-
-echo $PWD
-
-# tag the finngen layer's output directly as the final repo:tag -- never reuse $IMG_NAME for this, or
-# the bare regenie image it points to gets overwritten, and --base-regenie-docker can never cache-hit
-# against it again (Docker's cache is keyed on that image having been a FROM before; a name that used
-# to mean "bare regenie" now meaning "full finngen image" has no such history and forces a full rebuild)
-echo "Building finngen regenie-pipeline docker based on $IMG_NAME and using htslib $HTSLIB_VER"
-docker build -f docker/Dockerfile -t $REPO:$TAG --build-arg base_image=$IMG_NAME --build-arg HTSLIB_VER=$HTSLIB_VER  .
-if [[ $? -ne 0 ]]; then
-  echo "docker build failed -- not tagging or pushing" >&2
-  exit 1
-fi
-echo "Tagged $REPO:$TAG"
+echo "Building finngen layer on $IMG_NAME (htslib $HTSLIB_VER)"
+run docker build -f docker/Dockerfile -t "$REPO:$TAG" --build-arg base_image="$IMG_NAME" --build-arg HTSLIB_VER="$HTSLIB_VER" .
 
 if [[ "$PUSH" == true ]]; then
-  echo "Pushing to docker repo $REPO:$TAG"
-  docker push $REPO:$TAG
-else
-  echo "Skipping push (pass --push to also push)"
+  run docker push "$REPO:$TAG"
 fi
 
 echo
 echo "=== Summary ==="
 echo "Bare regenie image: ${BARE_TAG:-$BASE_REGENIE_DOCKER (reused, not built this run)}"
-echo "Finngen image:      $REPO:$TAG"
+if [[ "$PUSH" == true ]]; then
+  echo "Finngen image:      $REPO:$TAG"
+else
+  echo "Finngen image:      $REPO:$TAG (not pushed -- pass --push)"
+fi

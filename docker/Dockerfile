@@ -1,5 +1,5 @@
 
-ARG base_image
+ARG base_image=ubuntu:22.04
 FROM $base_image
 
 ARG HTSLIB_VER=1.14
