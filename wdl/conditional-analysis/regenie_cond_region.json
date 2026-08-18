@@ -3,7 +3,6 @@
     "conditional_analysis.pheno": "H7_AMD",
     "conditional_analysis.cond_regions": "gs://r12-data/regenie/conditional/test/test_locus.txt",
 
-    "conditional_analysis.is_binary": true,
     "conditional_analysis.firth_root": "gs://r14-data/regenie/release/firth/R14_GRM_V0_LD_0.2.PHENO.firth.gz",
 
     "conditional_analysis.conditioning_mlogp_threshold": 6,

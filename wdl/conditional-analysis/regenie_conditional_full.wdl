@@ -7,7 +7,6 @@ workflow conditional_analysis {
     File phenos_to_cond
     String release
     Boolean test
-    Boolean is_binary
     String firth_root
     String mlogp_col
     String chr_col
@@ -29,6 +28,9 @@ workflow conditional_analysis {
   Array[String] pheno_data = if test && length(all_pheno_data) > 10 then [all_pheno_data[0],all_pheno_data[1],all_pheno_data[2],all_pheno_data[3],all_pheno_data[4],all_pheno_data[5],all_pheno_data[6],all_pheno_data[7],all_pheno_data[8],all_pheno_data[9]] else all_pheno_data
   # returns covariate string for each pheno
   call filter_covariates {input: docker=docker,pheno_file=pheno_file,pheno_list = write_lines(pheno_data),covariates=covariates}
+  # returns is_binary (0/1) for each pheno, one awk pass over the whole batch instead of per-pheno
+  call check_is_binary {input: docker=docker,pheno_file=pheno_file,pheno_list = write_lines(pheno_data)}
+  Map[String,String] is_binary_map = read_map(check_is_binary.is_binary_tsv)
   # go through phenos
   scatter (p in pheno_data) {
     #get hits under pval threshold
@@ -49,13 +51,14 @@ workflow conditional_analysis {
      String chrom = region[1]
      String region_limits = region[2] 
      String locus = region[3]
+     Boolean pheno_is_binary = is_binary_map[pheno] == "1"
 
-     if (is_binary) {
+     if (pheno_is_binary) {
        File region_firth_list = sub(firth_root,"PHENO",pheno)
      }
 
     call regenie_conditional {
-       input: docker = docker, prefix=prefix,locus=locus,region=region_limits,pheno=pheno,chrom=chrom,covariates = cov_map[pheno],mlogp_col = mlogp_col,chr_col=chr_col,pos_col = pos_col,ref_col=ref_col,alt_col=alt_col,pval_threshold=conditioning_mlogp_threshold,sumstats_root=sumstats_root,pheno_file=pheno_file,is_binary=is_binary,firth_list=region_firth_list
+       input: docker = docker, prefix=prefix,locus=locus,region=region_limits,pheno=pheno,chrom=chrom,covariates = cov_map[pheno],mlogp_col = mlogp_col,chr_col=chr_col,pos_col = pos_col,ref_col=ref_col,alt_col=alt_col,pval_threshold=conditioning_mlogp_threshold,sumstats_root=sumstats_root,pheno_file=pheno_file,is_binary=pheno_is_binary,firth_list=region_firth_list
      }
    }
 
@@ -209,8 +212,68 @@ task regenie_conditional {
 }
 
 
+task check_is_binary {
+
+  input {
+    File pheno_file
+    File pheno_list
+    String docker
+  }
+
+  Int disk_size = ceil(size(pheno_file,'GB')) + 2 * 2
+  String outfile = "is_binary.tsv"
+
+  command <<<
+    set -euo pipefail
+    PHENOLIST=$(tr -s ' \t' '\n' < ~{pheno_list} | awk 'NF && !seen[$0]++' | paste -sd,)
+
+    zcat -f ~{pheno_file} | awk -F'\t' -v phenolist="$PHENOLIST" '
+      BEGIN { n=split(phenolist,names,","); remaining=n }
+      NR==1 {
+        for (i=1;i<=NF;i++) idx[$i]=i
+        for (j=1;j<=n;j++) if (!(names[j] in idx)) { missing[names[j]]=1; remaining-- }
+        if (remaining==0) exit
+        next
+      }
+      {
+        for (j=1;j<=n;j++) {
+          p=names[j]
+          if (p in missing || p in bad) continue
+          v=$(idx[p])
+          if (v=="" || v=="NA") continue
+          if (v!=0 && v!=1) { bad[p]=1; remaining-- }
+        }
+        if (remaining==0) exit
+      }
+      END {
+        for (j=1;j<=n;j++) {
+          p=names[j]
+          print p"\t"(p in missing ? "NA" : (p in bad ? 0 : 1))
+        }
+      }
+    ' > ~{outfile}
+
+    cut -f2 ~{outfile} | sort | uniq -c | sort -nr >&2
+  >>>
+
+  output {
+    File is_binary_tsv = outfile
+  }
+
+  runtime {
+    cpu: "1"
+    docker: "${docker}"
+    memory: "4 GB"
+    disks: "local-disk ${disk_size} HDD"
+    zones: "europe-west1-b europe-west1-c europe-west1-d"
+    preemptible: "1"
+    noAddress: true
+  }
+}
+
+
 task filter_covariates {
-  
+
   input {
     File pheno_file
     Array[String] covariates
@@ -218,7 +281,7 @@ task filter_covariates {
     String docker
     Int threshold_cov_count
   }
-  
+
   String outfile = "./pheno_cov_map_" + threshold_cov_count + ".txt"
   Int disk_size = ceil(size(pheno_file,'GB')) + 2 * 2
   
