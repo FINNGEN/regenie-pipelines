@@ -1,7 +1,7 @@
 {
     "conditional_analysis.prefix": "test",
-    "conditional_analysis.pheno": "H7_AMD",
-    "conditional_analysis.cond_regions": "gs://r12-data/regenie/conditional/test/test_locus.txt",
+    "conditional_analysis.pheno": "HEIGHT_IRN",
+    "conditional_analysis.cond_regions": "gs://r14-data/regenie/conditional/test/chr2_HEIGHT_IRN_locus.txt",
 
     "conditional_analysis.firth_root": "gs://r14-data/regenie/release/firth/R14_GRM_V0_LD_0.2.PHENO.firth.gz",
 

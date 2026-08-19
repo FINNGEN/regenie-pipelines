@@ -198,9 +198,11 @@ task check_is_binary {
   String outfile = "is_binary.tsv"
 
   command <<<
-    set -euo pipefail
+    set -eu
     PHENOLIST=$(tr -s ' \t' '\n' < ~{pheno_list} | awk 'NF && !seen[$0]++' | paste -sd,)
 
+    # no pipefail: awk exits early once every pheno is resolved, which SIGPIPEs the still-writing zcat -- harmless, and
+    # the sanity check below catches any case where a pheno didn't actually get classified.
     zcat -f ~{pheno_file} | awk -F'\t' -v phenolist="$PHENOLIST" '
       BEGIN { n=split(phenolist,names,","); remaining=n }
       NR==1 {
@@ -226,6 +228,14 @@ task check_is_binary {
         }
       }
     ' > ~{outfile}
+
+    # every requested pheno must resolve to a real 0/1 classification
+    while IFS=$'\t' read -r p v; do
+      if [[ "$v" != "0" && "$v" != "1" ]]; then
+        echo "ERROR: could not classify phenotype '$p' as binary/quantitative (got '$v')" >&2
+        exit 1
+      fi
+    done < ~{outfile}
 
     cut -f2 ~{outfile} | sort | uniq -c | sort -nr >&2
   >>>
