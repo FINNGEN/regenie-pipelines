@@ -14,7 +14,8 @@
     "regenie.sub_step2.step2.sex_specific_logpval": 1.623249,
 
     "regenie.sub_step1.step1.covariate_inclusion_threshold": 10,
-    "regenie.sub_step1.step1.grm_bed": "gs://r7_data/grm/R7_GRM_V1_LD_0.1.bed",
+    "regenie.sub_step1.grm_bed": "gs://r7_data/grm/R7_GRM_V1_LD_0.1.bed",
+    "regenie.sub_step1.filter_mac.docker":"eu.gcr.io/finngen-refinery-dev/bioinformatics:0.7",
     "regenie.sub_step1.step1.bsize": 1000,
     "regenie.sub_step1.step1.options": "",
 
