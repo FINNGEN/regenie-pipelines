@@ -26,6 +26,7 @@ workflow conditional_analysis_bash {
     Array[String] covariates
     File pheno_file
     String sumstats_root
+    File chunk_manifest
   }
 
   String prefix = "finngen_R" + release
@@ -34,7 +35,6 @@ workflow conditional_analysis_bash {
   # uniformly, here -- so test mode runs either 10 phenos (discovery) or 10 regions (custom), not both.
   call validate_regions {input: pheno_region_input=pheno_region_input, test=test}
   Boolean is_custom_regions = validate_regions.is_custom_regions
-  Array[Array[String]] input_rows = read_tsv(validate_regions.rows)
   Array[String] pheno_data = validate_regions.pheno_data
 
   # returns covariate string for each pheno
@@ -58,8 +58,11 @@ workflow conditional_analysis_bash {
     call merge_regions {input: hits=extract_cond_regions.gw_sig_res, test=test}
   }
 
-  # either the user-supplied regions or the discovered ones -- same 4-column (pheno,chrom,region,locus) shape either way
-  Array[Array[String]] all_regions = if is_custom_regions then input_rows else read_tsv(select_first([merge_regions.regions]))
+  # either the user-supplied regions or the discovered ones -- same 4-column (pheno,chrom,region,locus)
+  # shape either way, so attach_bgen_chunks runs once on the unified file regardless of branch.
+  File region_rows_4col = if is_custom_regions then validate_regions.rows else select_first([merge_regions.regions])
+  call attach_bgen_chunks {input: regions=region_rows_4col, chunk_manifest=chunk_manifest}
+  Array[Array[String]] all_regions = read_tsv(attach_bgen_chunks.regions_with_chunks)
 
   # loop over all regions running one variant per shard
   scatter (region in all_regions) {
@@ -69,8 +72,14 @@ workflow conditional_analysis_bash {
     String locus = region[3]
     Boolean pheno_is_binary = is_binary_map[pheno] == "1"
 
+    # WDL 1.0 has no split() builtin: replace commas with newlines, then round-trip through
+    # write_lines/read_lines to get a real Array[String] -- which then coerces elementwise to
+    # Array[File], same as this WDL's existing String->File tricks (e.g. sub(sumstats_root,...)).
+    Array[String] bgen_chunk_paths = read_lines(write_lines([sub(region[4], ",", "\n")]))
+    Array[File] bgen_chunks = bgen_chunk_paths
+
     call regenie_conditional_bash {
-      input: docker=docker,prefix=prefix,locus=locus,region=region_limits,pheno=pheno,chrom=chrom,covariates=cov_map[pheno],mlogp_col=mlogp_col,chr_col=chr_col,pos_col=pos_col,ref_col=ref_col,alt_col=alt_col,pval_threshold=conditioning_mlogp_threshold,sumstats_root=sumstats_root,pheno_file=pheno_file,is_binary=pheno_is_binary
+      input: docker=docker,prefix=prefix,locus=locus,region=region_limits,pheno=pheno,chrom=chrom,covariates=cov_map[pheno],mlogp_col=mlogp_col,chr_col=chr_col,pos_col=pos_col,ref_col=ref_col,alt_col=alt_col,pval_threshold=conditioning_mlogp_threshold,sumstats_root=sumstats_root,pheno_file=pheno_file,is_binary=pheno_is_binary,bgen_chunks=bgen_chunks
     }
   }
 
@@ -165,6 +174,57 @@ task merge_results {
   }
 }
 
+task attach_bgen_chunks {
+  # Adds a 5th column (comma-joined gs:// chunk paths overlapping the region) to the 4-column
+  # (pheno, chrom, region, locus) regions file, using a chunk-bounds manifest built by
+  # scripts/return_bgen_chunks_limits.sh. Runs once, on the unified regions file, regardless of
+  # whether it came from region discovery or custom user-supplied regions -- so both paths get
+  # chunk-aware bgen loading identically.
+  #
+  # Deliberately outputs ONE combined file rather than one-file-per-region: with ~16k regions in
+  # a full production run, glob-ing thousands of tiny per-region outputs would mean Cromwell
+  # delocalizing thousands of files sequentially (observed ~1-2s fixed overhead per file on this
+  # backend even for trivial files) -- hours of pure bookkeeping before any real work starts. A
+  # single combined TSV is one delocalization; each scatter shard splits its own row's chunk-path
+  # column into an Array[File] itself (see workflow body).
+
+  input {
+    File regions
+    File chunk_manifest
+  }
+
+  String outfile = "regions_with_chunks.tsv"
+
+  command <<<
+    set -euo pipefail
+    awk -F'\t' '
+      FNR==NR {
+        n[$2]++
+        path[$2,n[$2]] = $1
+        start[$2,n[$2]] = $3
+        end[$2,n[$2]] = $4
+        next
+      }
+      {
+        split($3, rc, ":"); split(rc[2], se, "-")
+        rstart = se[1]; rend = se[2]
+        key = "chr" $2
+        chunks = ""
+        for (i=1; i<=n[key]; i++) {
+          if (end[key,i] >= rstart && start[key,i] <= rend) {
+            chunks = (chunks == "") ? path[key,i] : chunks "," path[key,i]
+          }
+        }
+        print $1 "\t" $2 "\t" $3 "\t" $4 "\t" chunks
+      }
+    ' ~{chunk_manifest} ~{regions} > "~{outfile}"
+  >>>
+
+  output {
+    File regions_with_chunks = outfile
+  }
+}
+
 task regenie_conditional_bash {
 
   input {
@@ -179,7 +239,7 @@ task regenie_conditional_bash {
     String chrom
     # files to localize
     File pheno_file
-    String bgen_root
+    Array[File] bgen_chunks
     String null_root
     String sumstats_root
     # column names and stuff
@@ -204,9 +264,8 @@ task regenie_conditional_bash {
   File sumstats = sub(sumstats_root,"PHENO",pheno)
   File sum_tabix = sumstats + ".tbi"
   File null = sub(null_root,"PHENO",pheno)
-  File bgen = sub(bgen_root,'CHROM',chrom)
-  File bgen_sample = bgen + ".sample"
-  File bgen_index = bgen + ".bgi"
+  # all chunks for a chromosome share the same sample set/order -- any one chunk's .sample file works
+  File bgen_sample = bgen_chunks[0] + ".sample"
 
   # is_binary picks which json-supplied param string applies
   String selected_params = if is_binary then regenie_params_binary else regenie_params_qt
@@ -220,11 +279,17 @@ task regenie_conditional_bash {
     echo ~{pheno} ~{chrom} ~{cpus}
     tabix -h ~{sumstats} ~{region} > region_sumstats.txt
 
+    # merge only the chunk(s) overlapping this region into one local bgen, instead of localizing
+    # the whole chromosome -- chunks need no pre-existing .bgi (cat-bgen concatenates raw variant
+    # blocks directly), so only the merged result gets indexed.
+    cat-bgen -og ./region.bgen -clobber -g ~{sep=' ' bgen_chunks}
+    bgenix -g ./region.bgen -index -clobber
+
     # ---- WDL inputs -> the shell variables scripts/regenie_conditional.sh's own CLI parser would set ----
     PHENO="~{pheno}"
     OUT="./~{prefix}"
     PHENO_FILE="~{pheno_file}"
-    BGEN="~{bgen}"
+    BGEN="./region.bgen"
     SAMPLE_FILE="~{bgen_sample}"
     SUMSTATS="region_sumstats.txt"
     NULL_FILE="~{null}"
