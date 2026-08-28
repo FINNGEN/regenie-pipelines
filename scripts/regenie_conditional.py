@@ -46,13 +46,14 @@ def regenie_run(args,step,bgen,sample_file,pheno_file,covariates,condition_list,
         pred_file = os.path.join(args.tmp_dir, f"{args.basename}_{args.pheno}.pred")
         with open(pred_file,'wt') as o: o.write(f"{pheno}\t{null_file}")
 
-        # build null-firth list (2-column "pheno path" format regenie expects, see Step2_Models.cpp print_null_firth_info).
-        # args.firth_file may be an empty placeholder (0 bytes) when there's nothing to use -- skip --use-null-firth in that case.
-        firth_params = ''
-        if args.firth_file and os.path.getsize(args.firth_file) > 0:
-            firth_list_file = os.path.join(args.tmp_dir, f"{args.basename}_{args.pheno}.firth_list")
-            with open(firth_list_file,'wt') as o: o.write(f"{pheno} {args.firth_file}")
-            firth_params = f' --use-null-firth {firth_list_file}'
+        # Firth's null model is always fit fresh at every step (no --write-null-firth/--use-null-firth). Benchmarked
+        # directly (scripts/tests/firth_recycling_strategies_test.sh): warm-starting a step's null-firth fit from a
+        # previous step's (or an external) file is SLOWER than fitting fresh, not faster, because the newest
+        # conditioning variant's coefficient starts at 0 in the recycled file while every other coefficient is
+        # already tuned for a different (smaller) model -- that inconsistency trips regenie's Newton-Raphson solver
+        # into a slow retry ladder. A fresh fit instead starts from regenie's own free, already-current
+        # unpenalized-logistic estimate, which is consistent across all covariates including the new one. Measured:
+        # step 2 of a 2-step chain took 69.8s fresh vs 418.4s self-recycled vs 523.4s from an external firth file.
 
         # build condition file
         tmp_variant = os.path.join(args.tmp_dir, f"{args.basename}_variant.tmp")
@@ -63,7 +64,7 @@ def regenie_run(args,step,bgen,sample_file,pheno_file,covariates,condition_list,
         # add sample file if passed
         sample_cmd = f" --sample {sample_file}"  if os.path.isfile(sample_file)  else ""
         
-        cmd = f'{regenie_cmd} --step 2   {params}{firth_params} --bgen {bgen}  {sample_cmd} --out {os.path.join(args.tmp_dir,args.basename)}  --pred {pred_file} --phenoFile {pheno_file} --phenoCol {pheno} --condition-list {tmp_variant} {region}  --covarFile {pheno_file} --covarColList {covariates} --threads {threads}'
+        cmd = f'{regenie_cmd} --step 2   {params} --bgen {bgen}  {sample_cmd} --out {os.path.join(args.tmp_dir,args.basename)}  --pred {pred_file} --phenoFile {pheno_file} --phenoCol {pheno} --condition-list {tmp_variant} {region}  --covarFile {pheno_file} --covarColList {covariates} --threads {threads}'
         logging.debug(cmd)
         logmode = 'wt' if step == 0 else 'a'
         with open(log_file,logmode) as o:
@@ -191,13 +192,12 @@ if __name__ == '__main__':
     parser.add_argument('--pheno',type = str,help ='Pheno column in pheno file',required=True)
     parser.add_argument('--out',type = str,help ='Output Directory and prefix (e.g. /foo/bar/finngen)',required=True)
     parser.add_argument('--covariates',type = str,default = regenie_covariates,help='List of covariates')
-    parser.add_argument('--pheno-file',type = file_exists,help ='Path to pheno file',required=True)
+    parser.add_argument('--pheno-file',type = file_exists,help ='Path to pheno file',default = '/home/pete/r14/pheno/R14_COV_PHENO_V0.FID.txt.gz')
     parser.add_argument('--bgen',type = file_exists,help ='Path to bgen',required=True)
     parser.add_argument('--sample-file',type = file_exists,help ='Path to bgen sample file (if not in same directory as bgen)',required=False)
     parser.add_argument('--sumstats',type = file_exists,help ='Path to original sumstats',required=True)
-    parser.add_argument('--regenie-params',type=str,help ='extra bgen params',default = ' --bt --bsize 200 --ref-first' )
+    parser.add_argument('--regenie-params',type=str,help ='extra bgen params',default = ' --bt --firth --approx --bsize 200 --ref-first' )
     parser.add_argument('--null-file',type = file_exists,help ='File with null info.',required=True)
-    parser.add_argument('--firth-file',type = file_exists,help ='Path to this pheno\'s null-firth estimates file. May be an empty placeholder (0 bytes), in which case --use-null-firth is skipped.',required=False)
     parser.add_argument('--force',action = 'store_true',help = 'Flag for forcing re-run.')
     parser.add_argument( "-log",  "--log",  default="warning", choices = log_levels, help=(  "Provide logging level. " "Example --log debug', default='warning'"))
     parser.add_argument('--max-steps',type = int,default =10)

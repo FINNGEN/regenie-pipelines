@@ -1,6 +1,12 @@
 version 1.0
 
-workflow conditional_analysis {
+# Same workflow as conditional_merged.wdl, except regenie_conditional runs the bash port
+# (scripts/regenie_conditional.sh) inlined directly in the command block instead of shelling out to
+# regenie_conditional.py. WDL inputs are assigned straight into the shell variables the script's own
+# functions expect (PHENO, OUT, BGEN, ...), then the script's functions/driver logic are pasted in as-is.
+# Keep in sync with scripts/regenie_conditional.sh.
+
+workflow conditional_analysis_bash {
 
   input {
     String docker
@@ -63,17 +69,17 @@ workflow conditional_analysis {
     String locus = region[3]
     Boolean pheno_is_binary = is_binary_map[pheno] == "1"
 
-    call regenie_conditional {
+    call regenie_conditional_bash {
       input: docker=docker,prefix=prefix,locus=locus,region=region_limits,pheno=pheno,chrom=chrom,covariates=cov_map[pheno],mlogp_col=mlogp_col,chr_col=chr_col,pos_col=pos_col,ref_col=ref_col,alt_col=alt_col,pval_threshold=conditioning_mlogp_threshold,sumstats_root=sumstats_root,pheno_file=pheno_file,is_binary=pheno_is_binary
     }
   }
 
-  Array[File] results = flatten(regenie_conditional.conditional_chains)
+  Array[File] results = flatten(regenie_conditional_bash.conditional_chains)
   call merge_results {input: prefix=prefix,result_list=results,phenos_list=write_lines(pheno_data)}
 
   output {
-    Array[File] all_chains = flatten(regenie_conditional.conditional_chains)
-    Array[File] all_outputs = flatten(regenie_conditional.regenie_output)
+    Array[File] all_chains = flatten(regenie_conditional_bash.conditional_chains)
+    Array[File] all_outputs = flatten(regenie_conditional_bash.regenie_output)
     Array[File] pheno_chains = merge_results.pheno_independent_snps
   }
 }
@@ -159,7 +165,7 @@ task merge_results {
   }
 }
 
-task regenie_conditional {
+task regenie_conditional_bash {
 
   input {
     # GENERAL PARAMS
@@ -210,25 +216,222 @@ task regenie_conditional {
   String final_docker = if defined(regenie_docker) then regenie_docker else docker
 
   command <<<
+    set -euo pipefail
     echo ~{pheno} ~{chrom} ~{cpus}
     tabix -h ~{sumstats} ~{region} > region_sumstats.txt
 
-    # Firth (when regenie_params_binary is selected) always fits its null model fresh at every step, with no
-    # warm-start/recycling and no external pre-computed firth file. Benchmarked directly (see
-    # scripts/tests/firth_recycling_strategies_test.sh): recycling a null-firth start across chain steps that
-    # change the covariate set (each step adds the previous hit as a covariate) is *slower* than a fresh fit, not
-    # faster, because the new covariate's coefficient starts at 0 in the recycled file while every other
-    # coefficient is already tuned for a different model -- that inconsistency trips regenie's Newton-Raphson
-    # solver into a slow retry ladder (fit_firth_pseudo -> smaller-step/more-iter retry -> safety-checks-disabled
-    # retry). A fresh fit instead starts from regenie's own free, already-current unpenalized-logistic estimate,
-    # which is already consistent across all covariates including the new one, and converges cleanly. Measured:
-    # step 2 of a 2-step chain took 69.8s fresh vs 418.4s self-recycled vs 523.4s from an external firth file.
-    python3 /scripts/regenie_conditional.py \
-    --out ./~{prefix} --bgen ~{bgen} --null-file ~{null} --sumstats region_sumstats.txt \
-    --pheno-file ~{pheno_file} --pheno ~{pheno} \
-    --locus-region ~{locus} ~{region} --pval-threshold ~{pval_threshold} --max-steps ~{max_steps} \
-    --chr-col ~{chr_col} --pos-col ~{pos_col} --ref-col ~{ref_col} --alt-col ~{alt_col} --mlogp-col ~{mlogp_col} --beta-col ~{beta} --sebeta-col ~{sebeta} \
-    --covariates ~{covariates} --regenie-params "~{selected_params}" --log info
+    # ---- WDL inputs -> the shell variables scripts/regenie_conditional.sh's own CLI parser would set ----
+    PHENO="~{pheno}"
+    OUT="./~{prefix}"
+    PHENO_FILE="~{pheno_file}"
+    BGEN="~{bgen}"
+    SAMPLE_FILE="~{bgen_sample}"
+    SUMSTATS="region_sumstats.txt"
+    NULL_FILE="~{null}"
+    COVARIATES="~{covariates}"
+    REGENIE_PARAMS="~{selected_params}"
+    REGENIE_CMD="regenie"
+    FORCE=0
+    MAX_STEPS=~{max_steps}
+    CHR_COL="~{chr_col}"
+    POS_COL="~{pos_col}"
+    REF_COL="~{ref_col}"
+    ALT_COL="~{alt_col}"
+    MLOGP_COL="~{mlogp_col}"
+    BETA_COL="~{beta}"
+    SEBETA_COL="~{sebeta}"
+    THREADS=~{cpus}
+    PVAL_THRESHOLD=~{pval_threshold}
+    LOCUS_ARG="~{locus}"
+    REGION_ARG="~{region}"
+
+    # ---- everything below is scripts/regenie_conditional.sh's functions + driver logic, pasted verbatim
+    #      (CLI parsing/validation dropped -- the variables above already replace it). Keep in sync. ----
+
+    pretty_print() {
+      local string="$1" l="${2:-30}"
+      local half=$(( l - ${#string}/2 )); (( half < 0 )) && half=0
+      local dashes; dashes=$(printf '%*s' "$half" '' | tr ' ' '-')
+      echo "${dashes}> ${string} <${dashes}"
+    }
+
+    map_vals_to_string() {
+      awk -v b="$1" -v s="$2" -v m="$3" 'BEGIN{printf "{'"'"'beta'"'"': %.2f, '"'"'sebeta'"'"': %.2f, '"'"'mlogp'"'"': %.2f}", b, s, m}'
+    }
+
+    # region[0] can be "locus" or "region" depending on argument order -- whichever looks like CHR:START-END is the region.
+    check_region() {
+      local locus="$1" region="$2"
+      if [[ "$locus" == *:* && "$locus" == *-* ]]; then
+        local tmp="$locus"; locus="$region"; region="$tmp"
+      fi
+      CHECKED_LOCUS="$locus"
+      CHECKED_REGION_FLAG=" --range $region "
+    }
+
+    OUT_DIR=$(dirname "$OUT")
+    BASENAME=$(basename "$OUT")
+    TMP_DIR="$OUT_DIR/tmp"
+    mkdir -p "$OUT_DIR" "$TMP_DIR"
+
+    # automatically look for sample file if not explicitly passed
+    if [[ -z "$SAMPLE_FILE" ]]; then
+      for candidate in "${BGEN%.bgen}.bgen.sample" "${BGEN%.bgen}.sample"; do
+        [[ -f "$candidate" ]] && { SAMPLE_FILE="$candidate"; echo "WARNING: Using $SAMPLE_FILE as sample file." >&2; break; }
+      done
+    fi
+
+    # figure out whether threshold is a p-value or -log10(p)
+    PVAL_THRESHOLD=$(awk -v v="$PVAL_THRESHOLD" 'BEGIN{printf "%.10g", (v<1) ? -log(v)/log(10) : v}')
+    pretty_print "MLOGP THRESHOLD: $PVAL_THRESHOLD"
+
+    # ---- sumstats lookup cache: snpid -> beta, sebeta, mlogp (from the ORIGINAL, unconditioned sumstats) ----
+    PVAL_CACHE="$TMP_DIR/${PHENO}_pvals.tsv"
+    if [[ ! -f "$PVAL_CACHE" || "$FORCE" -eq 1 ]]; then
+      echo "reading original pvals.." >&2
+      zcat -f "$SUMSTATS" | awk -F'\t' -v chr_col="$CHR_COL" -v pos_col="$POS_COL" -v ref_col="$REF_COL" -v alt_col="$ALT_COL" -v mlogp_col="$MLOGP_COL" -v beta_col="$BETA_COL" -v sebeta_col="$SEBETA_COL" '
+        NR==1 {
+          for (i=1;i<=NF;i++) idx[$i]=i
+          c=idx[chr_col]; p=idx[pos_col]; r=idx[ref_col]; a=idx[alt_col]; m=idx[mlogp_col]; b=idx[beta_col]; s=idx[sebeta_col]
+          next
+        }
+        { print "chr" $c "_" $p "_" $r "_" $a "\t" $b "\t" $s "\t" $m }
+      ' > "$PVAL_CACHE"
+      echo "done." >&2
+    fi
+
+    # get_sum_dict_data equivalent: prints "beta\tsebeta\tmlogp" for a variant, or "0\t0\t0" if not found
+    # (matches the python script's defaultdict(lambda: defaultdict(lambda: "0")) fallback)
+    get_sum_dict_data() {
+      local variant="$1"
+      local line
+      line=$(awk -F'\t' -v v="$variant" '$1==v{print $2"\t"$3"\t"$4; exit}' "$PVAL_CACHE")
+      [[ -n "$line" ]] && echo "$line" || echo -e "0\t0\t0"
+    }
+
+    # ---- filter_pheno: extract FID/IID + pheno + covariate columns into a small tmp pheno file ----
+    FILTERED_PHENO_FILE="$TMP_DIR/${PHENO}_pheno.tmp"
+    if [[ ! -f "$FILTERED_PHENO_FILE" || "$FORCE" -eq 1 ]]; then
+      echo "Creating new pheno file..." >&2
+      header=$(zcat -f "$PHENO_FILE" | { head -1; cat >/dev/null; })
+      cols=$(awk -F'\t' -v want="${PHENO},${COVARIATES}" -v h="$header" '
+        BEGIN {
+          n = split(want, w, ",")
+          split(h, f, "\t")
+          for (i in f) idx[f[i]] = i
+          out = "1,2"
+          for (j=1; j<=n; j++) {
+            if (!(w[j] in idx)) { print "column " w[j] " not found in pheno file" > "/dev/stderr"; exit 1 }
+            out = out "," idx[w[j]]
+          }
+          print out
+        }')
+      zcat -f "$PHENO_FILE" | cut -f"$cols" > "$FILTERED_PHENO_FILE"
+      echo "done." >&2
+    fi
+
+    # ---- single regenie conditional run; sets REGENIE_OUT_FILE and REGENIE_RET ----
+    regenie_run() {
+      local step="$1" locus="$2" region_flag="$3" log_file="$4"
+
+      local regenie_file="$TMP_DIR/${BASENAME}_${PHENO}.regenie"
+      local out_file="$OUT_DIR/${BASENAME}_${PHENO}_${locus}_${step}.conditional"
+      pretty_print "VARIANT:${CONDITION_LIST[-1]}"
+      echo "generating $out_file ..." >&2
+
+      if [[ ! -f "$out_file" || "$FORCE" -eq 1 ]]; then
+        FORCE=1
+
+        local pred_file="$TMP_DIR/${BASENAME}_${PHENO}.pred"
+        printf "%s\t%s\n" "$PHENO" "$NULL_FILE" > "$pred_file"
+
+        local tmp_variant="$TMP_DIR/${BASENAME}_variant.tmp"
+        printf "%s\n" "${CONDITION_LIST[@]}" > "$tmp_variant"
+
+        local sample_cmd=""
+        [[ -n "$SAMPLE_FILE" && -f "$SAMPLE_FILE" ]] && sample_cmd=" --sample $SAMPLE_FILE"
+
+        local cmd="$REGENIE_CMD --step 2 $REGENIE_PARAMS --bgen $BGEN${sample_cmd} --out $TMP_DIR/$BASENAME --pred $pred_file --phenoFile $FILTERED_PHENO_FILE --phenoCol $PHENO --condition-list $tmp_variant $region_flag --covarFile $FILTERED_PHENO_FILE --covarColList $COVARIATES --threads $THREADS"
+        echo "$cmd" >&2
+
+        local start=$SECONDS ret=0
+        bash -c "$cmd" >> "$log_file" || ret=$?
+        echo "Script ran in $((SECONDS-start)) seconds with $THREADS cpus." >&2
+
+        [[ "$ret" -eq 0 ]] && mv "$regenie_file" "$out_file"
+        REGENIE_OUT_FILE="$out_file"
+        REGENIE_RET="$ret"
+      else
+        echo "file already exists" >&2
+        REGENIE_OUT_FILE="$out_file"
+        REGENIE_RET=0
+      fi
+    }
+
+    # ---- check_hit: find the top (max LOG10P) row in a regenie output file; sets NEXT_STEP and HIT_* ----
+    check_hit() {
+      local out_file="$1" step="$2" threshold="$3"
+      local result
+      result=$(awk '
+        NR==1 { for(i=1;i<=NF;i++) idx[$i]=i; next }
+        { v = $(idx["LOG10P"]) + 0; if (NR==2 || v > max) { max=v; id=$(idx["ID"]); beta=$(idx["BETA"]); se=$(idx["SE"]); pval=$(idx["LOG10P"]) } }
+        END { print id"\t"beta"\t"se"\t"pval }
+      ' "$out_file")
+      IFS=$'\t' read -r HIT_VARIANT HIT_BETA HIT_SE HIT_PVAL <<< "$result"
+      echo "CANDIDATE VARIANT:$HIT_VARIANT"
+      echo "Variant info from conditioned sumstats $(map_vals_to_string "$HIT_BETA" "$HIT_SE" "$HIT_PVAL")"
+      if awk -v p="$HIT_PVAL" -v t="$threshold" 'BEGIN{exit !(p>t)}'; then
+        NEXT_STEP=$((step+1))
+      else
+        NEXT_STEP=0
+      fi
+    }
+
+    # ---- main: recursive conditional chain for one locus/region ----
+    run_locus() {
+      local locus="$1" region_flag="$2"
+      pretty_print "$locus $region_flag conditional chain." 50
+
+      local log_file="${OUT}_${PHENO}_${locus}.log"
+      echo "Logging to $log_file"
+      local result_file="${OUT}_${PHENO}_${locus}.independent.snps"
+
+      IFS=',' read -ra CONDITION_LIST <<< "$locus"
+      local condition_variant="${CONDITION_LIST[-1]}"
+
+      IFS=$'\t' read -r b0 s0 m0 <<< "$(get_sum_dict_data "$condition_variant")"
+      {
+        echo -e "VARIANT\tBETA\tSE\tMLOG10P\tBETA_cond\tSE_cond\tMLOG10P_cond\tVARIANT_cond"
+        echo -e "${condition_variant}\t${b0}\t${s0}\t${m0}\tNA\tNA\tNA\tNA"
+      } > "$result_file"
+      echo "Variant info from original FG sumstats $(map_vals_to_string "$b0" "$s0" "$m0")"
+
+      local step=1
+      while (( step > 0 && step <= MAX_STEPS )); do
+        regenie_run "$step" "$locus" "$region_flag" "$log_file"
+        if [[ "$REGENIE_RET" -ne 0 ]]; then
+          echo "RUN FAILED, check $log_file for errors." >&2
+          return 1
+        fi
+
+        check_hit "$REGENIE_OUT_FILE" "$step" "$PVAL_THRESHOLD"
+        step="$NEXT_STEP"
+        if [[ "$step" -ne 0 ]]; then
+          local cond_list_str; cond_list_str=$(IFS=,; echo "${CONDITION_LIST[*]}")
+          IFS=$'\t' read -r cb cs cm <<< "$(get_sum_dict_data "$HIT_VARIANT")"
+          echo -e "${HIT_VARIANT}\t${cb}\t${cs}\t${cm}\t${HIT_BETA}\t${HIT_SE}\t${HIT_PVAL}\t${cond_list_str}" >> "$result_file"
+          condition_variant="$HIT_VARIANT"
+          CONDITION_LIST+=("$HIT_VARIANT")
+          echo "Variant info from original FG sumstats $(map_vals_to_string "$cb" "$cs" "$cm")"
+          echo "Hit signficant, proceeding to condition..."
+        else
+          echo "Hit not significant. Ending loop."
+        fi
+      done
+    }
+
+    check_region "$LOCUS_ARG" "$REGION_ARG"
+    run_locus "$CHECKED_LOCUS" "$CHECKED_REGION_FLAG"
   >>>
 
   output {
