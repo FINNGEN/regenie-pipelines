@@ -208,12 +208,22 @@ task attach_bgen_chunks {
       {
         split($3, rc, ":"); split(rc[2], se, "-")
         rstart = se[1]; rend = se[2]
-        key = "chr" $2
+        # matches the same 23<->X mapping used for variant IDs elsewhere: the manifest'\''s chrom
+        # label comes straight from bgenix, which reports the X bgen'\''s chromosome as "X", not "23"
+        key = ($2 == "23") ? "chrX" : "chr" $2
         chunks = ""
         for (i=1; i<=n[key]; i++) {
           if (end[key,i] >= rstart && start[key,i] <= rend) {
             chunks = (chunks == "") ? path[key,i] : chunks "," path[key,i]
           }
+        }
+        # never leave chunks empty -- a trailing empty TSV field gets silently dropped by
+        # Cromwell'\''s read_tsv (confirmed: turns a 5-column row into 4, breaking region[4] downstream
+        # with an out-of-bounds error instead of a clear failure). A region with zero overlapping
+        # chunks means a real manifest gap; fail loudly here instead of producing a bad row.
+        if (chunks == "") {
+          print "ERROR: no bgen chunks overlap region " $3 " (chrom key " key ")" > "/dev/stderr"
+          exit 1
         }
         print $1 "\t" $2 "\t" $3 "\t" $4 "\t" chunks
       }
