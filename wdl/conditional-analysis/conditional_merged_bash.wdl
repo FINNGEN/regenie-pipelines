@@ -55,7 +55,7 @@ workflow conditional_analysis_bash {
     }
 
     #SINGLE JOB PER LOCUS VERSION
-    call merge_regions {input: hits=extract_cond_regions.gw_sig_res}
+    call merge_regions {input: hits=extract_cond_regions.gw_sig_res, test=test}
   }
 
   # either the user-supplied regions or the discovered ones -- same 4-column (pheno,chrom,region,locus) shape either way
@@ -623,12 +623,21 @@ task merge_regions {
 
   input {
     Array[File] hits
+    Boolean test
   }
 
   String outfile = "regions.txt"
 
   command <<<
-    while read f; do cat $f >> tmp.txt; done < ~{write_lines(hits)}
+    # test mode: cap each pheno's discovered regions to 2 random rows, so with the upstream
+    # 10-pheno test-mode cap (validate_regions) the whole run is capped at 20 regions total.
+    while read f; do
+      if ~{true="true" false="false" test}; then
+        shuf "$f" | head -n 2 >> tmp.txt
+      else
+        cat "$f" >> tmp.txt
+      fi
+    done < ~{write_lines(hits)}
     cat tmp.txt > ~{outfile}
   >>>
 

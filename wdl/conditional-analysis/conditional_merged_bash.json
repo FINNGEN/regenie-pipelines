@@ -1,5 +1,5 @@
 {
-    "conditional_analysis_bash.test": false,
+    "conditional_analysis_bash.test": true,
     "conditional_analysis_bash.pheno_region_input": "gs://finngen-production-library-green/wdl/conditional/chr20_T2D_locus.txt",
     #"conditional_analysis_bash.pheno_region_input": "gs://finngen-production-library-green/wdl/conditional/phenos_test.txt",
 
@@ -13,7 +13,7 @@
     "conditional_analysis_bash.locus_mlogp_threshold": 7.3,
     "conditional_analysis_bash.conditioning_mlogp_threshold": 6,
     "conditional_analysis_bash.mlogp_col": "mlogp",
-    "conditional_analysis_bash.chr_col": " '#chrom' ",
+    "conditional_analysis_bash.chr_col": "#chrom",
     "conditional_analysis_bash.pos_col": "pos",
     "conditional_analysis_bash.ref_col": "ref",
     "conditional_analysis_bash.alt_col": "alt",
