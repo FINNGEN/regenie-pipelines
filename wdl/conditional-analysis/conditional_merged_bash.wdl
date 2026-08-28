@@ -50,7 +50,7 @@ workflow conditional_analysis_bash {
     scatter (p in pheno_data) {
       #get hits under pval threshold
       call extract_cond_regions {
-        input: docker=docker,pheno=p,mlogp_threshold=locus_mlogp_threshold,mlogp_col=mlogp_col,chr_col=chr_col,pos_col=pos_col,ref_col=ref_col,alt_col=alt_col,chroms=chroms,sumstats_root=sumstats_root
+        input: pheno=p,mlogp_threshold=locus_mlogp_threshold,mlogp_col=mlogp_col,chr_col=chr_col,pos_col=pos_col,ref_col=ref_col,alt_col=alt_col,chroms=chroms,sumstats_root=sumstats_root
       }
     }
 
@@ -656,7 +656,6 @@ task extract_cond_regions {
     Array[String] chroms
     Boolean add_hla
     Float mlogp_threshold
-    String docker
   }
 
   File region = sub(region_root,"PHENO",pheno)
@@ -667,10 +666,69 @@ task extract_cond_regions {
   String outfile = pheno + "_sig_hits.txt"
 
   command <<<
-    cat ~{region} > tmp.bed
-    ~{if add_hla then "echo -e '6\t29000000\t34000000' >> tmp.bed" else ""}
+    set -euo pipefail
 
-    python3 /scripts/filter_hits_regions.py --sumstats ~{sumstats} --regions tmp.bed --pheno ~{pheno} --pval_threshold ~{mlogp_threshold} --pos_col ~{pos_col} --chr_col ~{chr_col} --ref_col ~{ref_col} --alt_col ~{alt_col} --mlogp_col ~{mlogp_col} --chroms ~{sep=" " chroms} --out ./ --log info
+    PHENO="~{pheno}"
+    SUMSTATS="~{sumstats}"
+    PVAL_THRESHOLD="~{mlogp_threshold}"
+    CHR_COL="~{chr_col}"
+    POS_COL="~{pos_col}"
+    REF_COL="~{ref_col}"
+    ALT_COL="~{alt_col}"
+    MLOGP_COL="~{mlogp_col}"
+    CHROMS=(~{sep=" " chroms})
+    OUT="."
+
+    REGIONS="tmp.bed"
+    cat ~{region} > "$REGIONS"
+    ~{if add_hla then "echo -e '6\t29000000\t34000000' >> tmp.bed" else ""}
+    echo "$(IFS=' '; echo "${CHROMS[*]}") chromosomes included."
+    echo "> ${PHENO} <"
+
+    REGION_TMP="${OUT}/${PHENO}_subset_regions.txt.region.bed"
+    CHROM_LIST=$(IFS=,; echo "${CHROMS[*]}")
+
+    #subset regions to include only selected chroms
+    awk -v chrom_list="${CHROM_LIST}" '
+      BEGIN { n = split(chrom_list, arr, ","); for (i=1;i<=n;i++) valid[arr[i]] = 1 }
+      ($1 in valid)
+    ' "$REGIONS" > "$REGION_TMP"
+
+    TOT_REGIONS=$(wc -l < "$REGION_TMP")
+    [[ "$TOT_REGIONS" -gt 0 ]] && echo "${TOT_REGIONS} regions to be filtered." || echo "WARNING: ${REGIONS} empty. No hits will be returned!" >&2
+
+    echo -n "Processing data..."
+
+    #get column indices
+    HEADER=$(tabix -H "$SUMSTATS")
+    read -r P M R A <<< "$(awk -F'\t' -v pos_col="$POS_COL" -v mlogp_col="$MLOGP_COL" -v ref_col="$REF_COL" -v alt_col="$ALT_COL" '
+      { for(i=1;i<=NF;i++) idx[$i]=i; print idx[pos_col], idx[mlogp_col], idx[ref_col], idx[alt_col] }
+    ' <<< "$HEADER")"
+
+    OUT_FILE="${OUT}/${PHENO}_sig_hits.txt"
+    rm -f "${OUT}/${PHENO}_sig_hits_"*.txt "$OUT_FILE"
+    touch "$OUT_FILE"
+
+    while read -r chrom start end; do
+      # subset sumstats to each region, filter by threshold, sort by mlogp, and take the top hit (if any) -- one line per region
+      top=$(tabix "$SUMSTATS" "${chrom}:${start}-${end}" \
+        | awk -F'\t' -v m="$M" -v t="$PVAL_THRESHOLD" '$m>t' \
+        | sort -t$'\t' -k"${M},${M}rn" | { head -1; cat >/dev/null; })
+      [[ -z "$top" ]] && continue
+
+      IFS=$'\t' read -r -a f <<< "$top"
+      mlogp="${f[$((M-1))]}" pos="${f[$((P-1))]}" ref="${f[$((R-1))]}" alt="${f[$((A-1))]}"
+      # fix chromosome label for variant ID
+      label="$chrom"; [[ "$chrom" == "23" ]] && label="X"
+      variant="chr${label}_${pos}_${ref}_${alt}"
+      region="${chrom}:${start}-${end}"
+      line="${PHENO}\t${chrom}\t${region}\t${variant}\t${mlogp}"
+      echo -e "$line" >> "$OUT_FILE"
+      echo -e "$line" >> "${OUT}/${PHENO}_sig_hits_${chrom}.txt"
+    done < "$REGION_TMP"
+
+    echo "done."
+    echo "dumping results to ${OUT_FILE}"
   >>>
 
   output {
@@ -679,7 +737,6 @@ task extract_cond_regions {
   }
 
   runtime {
-    docker: "${docker}"
     disks: "local-disk ${disk_size} HDD"
   }
 }
