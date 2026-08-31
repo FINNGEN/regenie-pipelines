@@ -1,12 +1,13 @@
 version 1.0
 
-# Same workflow as conditional_merged.wdl, except regenie_conditional runs the bash port
-# (scripts/regenie_conditional.sh) inlined directly in the command block instead of shelling out to
-# regenie_conditional.py. WDL inputs are assigned straight into the shell variables the script's own
-# functions expect (PHENO, OUT, BGEN, ...), then the script's functions/driver logic are pasted in as-is.
-# Keep in sync with scripts/regenie_conditional.sh.
+# Conditional analysis pipeline. regenie_conditional and extract_cond_regions run the bash ports
+# (scripts/regenie_conditional.sh, scripts/filter_hits_regions.sh) inlined directly in their command
+# blocks, rather than shelling out to python (the old regenie_conditional.py/filter_hits_regions.py,
+# now retired). WDL inputs are assigned straight into the shell variables each script's own
+# hardcoded-inputs section expects, then the rest of that script's logic is pasted in as-is. Keep in
+# sync with scripts/regenie_conditional.sh and scripts/filter_hits_regions.sh.
 
-workflow conditional_analysis_bash {
+workflow regenie_conditional_analysis {
 
   input {
     String docker
@@ -78,17 +79,17 @@ workflow conditional_analysis_bash {
     Array[String] bgen_chunk_paths = read_lines(write_lines([sub(region[4], ",", "\n")]))
     Array[File] bgen_chunks = bgen_chunk_paths
 
-    call regenie_conditional_bash {
+    call regenie_conditional {
       input: docker=docker,prefix=prefix,locus=locus,region=region_limits,pheno=pheno,chrom=chrom,covariates=cov_map[pheno],mlogp_col=mlogp_col,chr_col=chr_col,pos_col=pos_col,ref_col=ref_col,alt_col=alt_col,pval_threshold=conditioning_mlogp_threshold,sumstats_root=sumstats_root,pheno_file=pheno_file,is_binary=pheno_is_binary,bgen_chunks=bgen_chunks
     }
   }
 
-  Array[File] results = flatten(regenie_conditional_bash.conditional_chains)
+  Array[File] results = flatten(regenie_conditional.conditional_chains)
   call merge_results {input: prefix=prefix,result_list=results,phenos_list=write_lines(pheno_data)}
 
   output {
-    Array[File] all_chains = flatten(regenie_conditional_bash.conditional_chains)
-    Array[File] all_outputs = flatten(regenie_conditional_bash.regenie_output)
+    Array[File] all_chains = flatten(regenie_conditional.conditional_chains)
+    Array[File] all_outputs = flatten(regenie_conditional.regenie_output)
     Array[File] pheno_chains = merge_results.pheno_independent_snps
   }
 }
@@ -235,7 +236,7 @@ task attach_bgen_chunks {
   }
 }
 
-task regenie_conditional_bash {
+task regenie_conditional {
 
   input {
     # GENERAL PARAMS

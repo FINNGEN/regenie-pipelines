@@ -30,11 +30,11 @@ OUT="."
 mkdir -p "$OUT"
 
 # same as extract_cond_regions's own region-building: start from the pheno's finemap regions,
-# then append extra fixed regions -- HLA, and PAR (pseudoautosomal, chrX).
+# then append the fixed HLA region below.
 REGIONS="tmp.bed"
 cat "$REGION_ROOT" > "$REGIONS"
 echo -e "6\t29000000\t34000000" >> "$REGIONS"
-# TODO: PAR region coordinates -- need exact chrom/start/end before adding.
+# TODO: PAR region (pseudoautosomal, chrX) -- not yet added, coordinates pending.
 echo "$(IFS=' '; echo "${CHROMS[*]}") chromosomes included."
 echo "> ${PHENO} <"
 
