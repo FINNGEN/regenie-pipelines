@@ -5,7 +5,7 @@
 # authoritative implementation; keep the two in sync.
 #
 # For each region (a "chrom start end" bed-like file, built below from the pheno's finemap regions
-# plus HLA/PAR), finds the single most significant variant (by mlogp) within that region from
+# plus HLA), finds the single most significant variant (by mlogp) within that region from
 # --sumstats, restricted to chromosomes in CHROMS. Writes one combined hits file (pheno, chrom,
 # region, variant, mlogp) plus one file per chromosome.
 set -euo pipefail
@@ -34,7 +34,6 @@ mkdir -p "$OUT"
 REGIONS="tmp.bed"
 cat "$REGION_ROOT" > "$REGIONS"
 echo -e "6\t29000000\t34000000" >> "$REGIONS"
-# TODO: PAR region (pseudoautosomal, chrX) -- not yet added, coordinates pending.
 echo "$(IFS=' '; echo "${CHROMS[*]}") chromosomes included."
 echo "> ${PHENO} <"
 
