@@ -76,6 +76,8 @@ Summary files with p < 1e-6 variants including annotation:
 
 This is a wrapper pipeline of [regenie](https://rgcgithub.github.io/regenie/) for conditional analysis. The pipeline is mainly built a single python [script](scripts/regenie_conditional.py) that iteratively runs the conditional analysis of regenie until no significant hits are found anymore. The wdl is meant for release purposes and will run all hits from a list of phenos and chromosomes based on the official Finngen results. 
 
+The top-level [`regenie_conditional_full.wdl`](wdl/conditional-analysis/regenie_conditional_full.wdl) + [`regenie_conditional_full.json`](wdl/conditional-analysis/regenie_conditional_full.json) reflect the currently active version of the pipeline and are meant to be edited release over release. Because the wdl's input schema has changed between releases (e.g. `is_binary`/Firth support was added after R14), each past release is frozen under its own `wdl/conditional-analysis/rXX/` folder, containing the exact wdl + json pair that release actually ran against — mirroring the per-release folder convention under `wdl/gwas/`, except here the wdl itself is versioned too since it isn't guaranteed stable across releases.
+
 ### regenie_conditional.py
 
 This is the "engine" of the pipeline, that can also be used independently, so I will first explain its mechanism and inputs. 
@@ -157,6 +159,10 @@ Global inputs:
 "conditional_analysis.pos_col": "pos",
 "conditional_analysis.ref_col": "ref",
 "conditional_analysis.alt_col": "alt",
+
+"conditional_analysis.test": false,
+"conditional_analysis.is_binary": true,
+"conditional_analysis.firth_root": "gs://r14-data/regenie/release/firth/R14_GRM_V0_LD_0.2.PHENO.firth.gz",
  ``` 
  `phenos_to cond` and `chroms` determine what phenos and what chrom regions are run. This can be handy to run shorter/test runs.   
  `pheno_file` is the file that contains all pheno related data. It has to have the FID column and contain the covariates.  
@@ -165,6 +171,11 @@ Global inputs:
  
  `locus_mlogp_threshold` determines the threshold for choosing the starting locuses (extracted from sumstats).  
  `conditioning_mlogp_threshold` instead is the parameter used to stop the regenie chain conditional run.  
+
+ `test`, when `true`, cuts the run down to a cheap smoke test: `phenos_to_cond` is truncated to its first 10 entries *before* `filter_covariates`/`extract_cond_regions` ever run (so the expensive per-pheno scatter doesn't fan out over the full release batch), and `merge_regions` further shuffles and caps the pooled loci to 10 before the `regenie_conditional` scatter. Both caps apply independently, so a test run touches at most 10 phenos and at most 10 loci end to end.
+
+ `is_binary` picks which regenie run mode the whole batch uses — `true` for binary (logistic, Firth-corrected) phenotypes, `false` for quantitative ones. It's a single toggle for the entire workflow run, not per-pheno, so a batch in `phenos_to_cond` must be all-binary or all-quantitative; mixed batches need two separate runs.  
+ `firth_root` is the `PHENO`-templated path to regenie step 1's approximate-Firth null estimates file (the `*.firth.gz` analogue of `null_root`'s `*.loco.gz`). It's a `String`, not a `File` — not every binary phenotype actually has a null-firth file from step 1 (only the ones that needed it, e.g. rare/quasi-separated endpoints), so requiring it to exist would fail otherwise-valid binary runs. Instead, `regenie_conditional`'s command block checks for the file at runtime (`gsutil -q stat`) and only adds `--use-null-firth` if it's actually there; if it's missing (or the run is quantitative), regenie still runs `--firth` correction as normal, just without the acceleration file.  
  
  ### filter_covariates
  This is a preprocessing task. It generates for each pheno the list of valid covariates to be passed to regenie. It checks that for each group of input phenos (in this case each pheno is its own group) there are at least N counts of non NA samples *and* non 0 covariates. The output of the task is a pheno--> covariates map object that is then passed to regenie later.
@@ -181,7 +192,9 @@ This task returns the top hits for each pheno, under the previously defined thre
 
 ```
 "conditional_analysis.extract_cond_regions.region_root": "gs://r9_data/finemap/release/regions/PHENO.bed",
+"conditional_analysis.extract_cond_regions.add_hla": true,
 ```
+`add_hla` appends the fixed HLA region (chr6:29,000,000-34,000,000) to every pheno's region bed before hit extraction, on top of whatever regions `region_root` already supplies.
 
 ### merge_regions
 Pretty self explanatory task. All regions from the previous task are merged into a single input file over which we will scatter the regenie runs. 
@@ -195,7 +208,8 @@ This is the major task where the magic happens. For reference, the shards will t
     "conditional_analysis.regenie_conditional.sebeta": "beta",
     "conditional_analysis.regenie_conditional.beta": "sebeta",
     "conditional_analysis.regenie_conditional.max_steps": 10,
-    "conditional_analysis.regenie_conditional.regenie_params": " ' --bt --bsize 200 --ref-first ' ",
+    "conditional_analysis.regenie_conditional.regenie_params_binary": "--bt --firth --firth-se --approx --pThresh 0.01 --bsize 200 --ref-first",
+    "conditional_analysis.regenie_conditional.regenie_params_qt": "--qt --bsize 200 --ref-first",
     "conditional_analysis.regenie_conditional.cpus": 4,
 
 ```
@@ -203,9 +217,16 @@ This is the major task where the magic happens. For reference, the shards will t
 `null_root` are the step1 outputs.  
 `beta` and `se_beta` are the column names for the entries in the sumstat file.  
 `max_steps` controls the maximum length of the chain.  
-`regenie_params` are all the other flags to be passed to regenie.  
 `cpus` is self explanatory.
+
+`regenie_params_binary`/`regenie_params_qt` are the full set of extra flags passed straight through to regenie, one of which is picked per run based on the workflow-level `is_binary` toggle (see above) — there's no need to repeat `--bt`/`--qt` anywhere else, and no need for a separate optional override input anymore. When `is_binary` is `true`, the task's command block additionally checks whether a null-firth file exists for that pheno (see `firth_root` above) and appends `--use-null-firth <local_path>` itself if so — this piece can't live in the json since both the existence check and the local path depend on runtime resolution per pheno.
 
 ### PHEWEB IMPORT
 
 The last munging step has been problematic lately due to the number of files needed to be munged. For this scenario there is, if needed, a separated `pheweb_import.wdl` that reproduces the last step of the wdl by dealing with the files in chunks. The relevant inputs are the list of paths for conditional chains and regenie outputs that are part of the release anyways.
+
+### AD HOC SINGLE-PHENO RERUNS: regenie_cond_region.wdl
+
+[`regenie_cond_region.wdl`](wdl/conditional-analysis/regenie_cond_region.wdl) is a separate, lighter-weight entry point for rerunning conditional analysis on a **single phenotype** against a **pre-supplied list of loci** — it skips `extract_cond_regions`/`merge_regions` entirely and instead reads a `cond_regions` file (tsv: chrom, region end, locus) directly. Useful for one-off follow-up on a specific pheno/locus without re-scanning the whole release.
+
+It shares the same `regenie_conditional` task logic as the main wdl (including `is_binary`/`regenie_params_binary`/`regenie_params_qt`/`firth_root` — see above), but the two wdls are **not** imported from a common source, they're independently maintained copies. Any future change to the conditional-analysis/Firth logic in `regenie_conditional_full.wdl` needs to be applied to `regenie_cond_region.wdl` by hand as well.

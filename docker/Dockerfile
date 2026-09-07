@@ -1,5 +1,5 @@
 
-ARG base_image
+ARG base_image=ubuntu:22.04
 FROM $base_image
 
 ARG HTSLIB_VER=1.14
@@ -8,9 +8,15 @@ COPY scripts/qqplot.R /usr/local/bin
 RUN chmod a+x /usr/local/bin/qqplot.R
 
 
-RUN apt-get update &&  apt-get install wget make curl gcc g++ cmake gfortran libreadline6-dev libboost-all-dev libopenblas-dev \
+RUN apt-get update &&  apt-get install wget make curl gcc g++ g++-9 cmake gfortran libreadline6-dev libboost-all-dev libopenblas-dev \
 default-jre lsb-core libcairo2-dev libpcre2-dev libpcre3-dev libssl-dev libcurl4-openssl-dev libz-dev libbz2-dev liblzma-dev zlib1g-dev --yes
-RUN apt-get install python3-pip -y && pip3 install -r requirements.txt 
+RUN apt-get install python3-pip -y && pip3 install -r requirements.txt
+
+# bgenix/cat-bgen (for merging/subsetting bgen chunks) don't compile with g++ 11 -- use g++-9
+RUN wget http://code.enkre.net/bgen/tarball/release/bgen.tgz && \
+    tar xzf bgen.tgz && cd bgen.tgz && \
+    CXX=/usr/bin/g++-9 python3 waf configure && python3 waf && \
+    mv build/apps/bgenix build/apps/cat-bgen build/apps/edit-bgen /usr/local/bin/ && cd .. && rm -rf bgen.tgz
 RUN wget https://cloud.r-project.org/src/base/R-4/R-4.1.2.tar.gz && tar xvzf R-4.1.2.tar.gz 
 RUN cd R-4.1.2 && ./configure --with-x=no --enable-R-shlib=yes --with-blas="-lopenblas" &&  make &&   mkdir -p /usr/local/lib/R/lib &&   make install &&  cd .. &&   rm -rf R-4.1.2*
 
