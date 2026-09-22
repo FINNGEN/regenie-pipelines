@@ -5,6 +5,7 @@ task step1 {
     File grm_bed
     File grm_bim = sub(grm_bed, "\\.bed$", ".bim")
     File grm_fam = sub(grm_bed, "\\.bed$", ".fam")
+    File extract_vars # variants to extract from grm file
     String prefix = basename(grm_bed, ".bed")
     File cov_pheno
     String covariates
@@ -142,6 +143,7 @@ task step1 {
         --gz \
         --threads $n_cpu \
         --out ${prefix} \
+        --extract ${extract_vars} \
         ${if is_binary then "--write-null-firth" else ""} \
         ${options}
 
@@ -198,6 +200,62 @@ task step1 {
     }
 }
 
+task filter_mac{
+    File grm_bed
+    File grm_bim = sub(grm_bed, "\\.bed$", ".bim")
+    File grm_fam = sub(grm_bed, "\\.bed$", ".fam")
+    File cov_file
+    String docker
+    Array[String] endpoints
+    command <<<
+    #samples 
+    cat << "__EOF__" > script.py
+import gzip
+import sys
+FID_COL="FID"
+colnames = sys.argv[1].split(",")
+fname=sys.argv[2]
+with gzip.open(fname,"rt",encoding="utf-8") as f:
+    header = f.readline().strip().split("\t")
+    hdi = {a:i for i,a in enumerate(header)}
+    samples = []
+    for line in f:
+        cols = line.strip().split("\t")
+        sample_id = cols[hdi[FID_COL]]
+        for c in colnames:
+            if cols[hdi[c]] != "NA":
+                samples.append(sample_id)
+                break
+for sample in samples:
+    print(sample,sample)
+__EOF__
+    python3 script.py "${sep="," endpoints}" ${cov_file} > samples.txt
+
+    #get extract file
+    plink2 \
+    --bfile ${sub(grm_bed, "\\.bed$", "")} \
+    --keep samples.txt \
+    --mac 100 \
+    --write-snplist \
+    --out snps_pass
+    >>>
+
+    output{
+        File extract_vars = "snps_pass.snplist"
+    }
+
+    runtime {
+
+        docker: "${docker}"
+        cpu: 2
+        memory: "12 GB"
+        disks: "local-disk 200 HDD"
+        zones: "europe-west1-b europe-west1-c europe-west1-d"
+        preemptible: 2
+        noAddress: true
+    }
+}
+
 workflow regenie_step1 {
 
     Array[String] phenolist
@@ -207,10 +265,15 @@ workflow regenie_step1 {
     String docker
     Boolean auto_remove_sex_covar
     String sex_col_name
+    File grm_bed
+
+    call filter_mac{
+        input:grm_bed = grm_bed,cov_file=cov_pheno,endpoints= phenolist
+    }
 
     call step1 {
         input: phenolist=phenolist, is_binary=is_binary, cov_pheno=cov_pheno, covariates=covariates,
-        auto_remove_sex_covar=auto_remove_sex_covar, docker=docker, sex_col_name=sex_col_name
+        auto_remove_sex_covar=auto_remove_sex_covar, docker=docker, sex_col_name=sex_col_name, extract_vars = filter_mac.extract_vars,grm_bed=grm_bed
     }
 
     output {
