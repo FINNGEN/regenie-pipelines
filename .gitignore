@@ -1,0 +1,10 @@
+# Emacs lock and backup files
+.#*
+*~
+
+# Python
+__pycache__/
+
+# Local work
+regenie/
+scripts/tests/
