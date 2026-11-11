@@ -207,6 +207,7 @@ task filter_mac{
     File cov_file
     String docker
     Array[String] endpoints
+    Int mac_threshold = 100
     command <<<
     #samples 
     cat << "__EOF__" > script.py
@@ -235,7 +236,7 @@ __EOF__
     plink2 \
     --bfile ${sub(grm_bed, "\\.bed$", "")} \
     --keep samples.txt \
-    --mac 100 \
+    --mac ${mac_threshold} \
     --write-snplist \
     --out snps_pass
     >>>
