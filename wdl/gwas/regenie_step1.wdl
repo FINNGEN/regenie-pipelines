@@ -11,6 +11,7 @@ task step1 {
     String covariates
     Int bsize
     String options
+    File samples
 
     String docker
     Boolean auto_remove_sex_covar
@@ -144,6 +145,7 @@ task step1 {
         --threads $n_cpu \
         --out ${prefix} \
         --extract ${extract_vars} \
+        --keep ${samples} \
         ${if is_binary then "--write-null-firth" else ""} \
         ${options}
 
@@ -243,6 +245,7 @@ __EOF__
 
     output{
         File extract_vars = "snps_pass.snplist"
+        File samples = "samples.txt"
     }
 
     runtime {
@@ -274,7 +277,8 @@ workflow regenie_step1 {
 
     call step1 {
         input: phenolist=phenolist, is_binary=is_binary, cov_pheno=cov_pheno, covariates=covariates,
-        auto_remove_sex_covar=auto_remove_sex_covar, docker=docker, sex_col_name=sex_col_name, extract_vars = filter_mac.extract_vars,grm_bed=grm_bed
+        auto_remove_sex_covar=auto_remove_sex_covar, docker=docker, sex_col_name=sex_col_name, extract_vars = filter_mac.extract_vars,
+        grm_bed=grm_bed, samples = filter_mac.samples
     }
 
     output {
@@ -284,5 +288,6 @@ workflow regenie_step1 {
         Array[File] nulls = step1.nulls
         String covars_used = step1.covars_used
         Boolean is_single_sex = step1.is_single_sex
+        File samples = filter_mac.samples
     }
 }

@@ -49,7 +49,7 @@ workflow regenie {
         call sub.regenie_step2 as sub_step2 {
             input: phenolist=pheno_chunk, is_binary=is_binary, cov_pheno=cov_pheno, covariates=sub_step1.covars_used,
             pred=sub_step1.pred, loco=sub_step1.loco, nulls=sub_step1.nulls, firth_list=sub_step1.firth_list,
-            sex_col_name=sex_col_name, is_single_sex=sub_step1.is_single_sex,minmac=minmac
+            sex_col_name=sex_col_name, is_single_sex=sub_step1.is_single_sex,minmac=minmac, samples=sub_step1.samples
         }
     }
 

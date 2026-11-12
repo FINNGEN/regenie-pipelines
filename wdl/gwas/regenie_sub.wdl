@@ -18,6 +18,7 @@ task step2 {
     Int bsize
     Int minmac = 5
     String options
+    File samples
 
     String docker
 
@@ -29,8 +30,8 @@ task step2 {
     String DOLLAR="$"
 
     command <<<
-      ## continue statement exits with 1.... switch to if statement below in case want to pipefail back
-        ##set -euxo pipefail
+        ## set -e needed so that e.g. a regenie run killed by OOM (exit 137) fails the task instead of reporting success
+        set -euxo pipefail
 
         n_cpu=`grep -c ^processor /proc/cpuinfo`
 
@@ -60,6 +61,7 @@ task step2 {
         --bsize ${bsize} \
         --threads $n_cpu \
         --minMAC ${minmac} \
+        --keep ${samples} \
         --gz \
         --out ${prefix} \
         ${options}
@@ -512,12 +514,14 @@ workflow regenie_step2 {
     Boolean is_single_sex
     Boolean run_sex_specific
     Int minmac = 5
+    File samples
 
     scatter (bgen in bgens) {
         call step2 {
             input: docker=docker, phenolist=phenolist, is_binary=is_binary, cov_pheno=cov_pheno,
               covariates=covariates, pred=pred, loco=loco, nulls=nulls,firth_list=firth_list,bgen=bgen,
-              sex_col_name=sex_col_name, run_sex_specific=(run_sex_specific && !is_single_sex), minmac=minmac
+              sex_col_name=sex_col_name, run_sex_specific=(run_sex_specific && !is_single_sex), minmac=minmac,
+              samples=samples
         }
     }
 
