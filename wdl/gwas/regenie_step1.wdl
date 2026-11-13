@@ -194,7 +194,7 @@ task step1 {
 
         docker: "${docker}"
         cpu: if length(phenolist) == 1 then 1 else if length(phenolist) <=10 then 2 else 4
-        memory: if length(phenolist) == 1 then "12 GB" else "16 GB"
+        memory: if length(phenolist) == 1 then "2 GB" else "16 GB"
         disks: "local-disk 200 HDD"
         zones: "europe-west1-b europe-west1-c europe-west1-d"
         preemptible: 2
@@ -209,6 +209,8 @@ task filter_mac{
     File cov_file
     String docker
     Array[String] endpoints
+    String sex_col_name
+    Boolean is_binary
     Int mac_threshold = 100
     command <<<
     #samples 
@@ -218,6 +220,11 @@ import sys
 FID_COL="FID"
 colnames = sys.argv[1].split(",")
 fname=sys.argv[2]
+SEX_COL=sys.argv[3]
+IS_BINARY = sys.argv[4] == "true"
+sex_files = {"0": open("males.txt", "w"), "1": open("females.txt", "w")}
+# per pheno and sex: number of cases (binary) or non-NA samples (quantitative)
+counts = {c: {"0": 0, "1": 0} for c in colnames}
 with gzip.open(fname,"rt",encoding="utf-8") as f:
     header = f.readline().strip().split("\t")
     hdi = {a:i for i,a in enumerate(header)}
@@ -225,14 +232,26 @@ with gzip.open(fname,"rt",encoding="utf-8") as f:
     for line in f:
         cols = line.strip().split("\t")
         sample_id = cols[hdi[FID_COL]]
-        for c in colnames:
-            if cols[hdi[c]] != "NA":
-                samples.append(sample_id)
-                break
+        vals = [cols[hdi[c]] for c in colnames]
+        if all(v == "NA" for v in vals):
+            continue
+        samples.append(sample_id)
+        sex = cols[hdi[SEX_COL]]
+        if sex in sex_files:
+            sex_files[sex].write(sample_id + " " + sample_id + "\n")
+            for c, v in zip(colnames, vals):
+                if (v == "1") if IS_BINARY else (v != "NA"):
+                    counts[c][sex] += 1
+for fh in sex_files.values():
+    fh.close()
+# columns: pheno, males, females
+with open("sex_counts.txt", "w") as out:
+    for c in colnames:
+        out.write(c + "\t" + str(counts[c]["0"]) + "\t" + str(counts[c]["1"]) + "\n")
 for sample in samples:
     print(sample,sample)
 __EOF__
-    python3 script.py "${sep="," endpoints}" ${cov_file} > samples.txt
+    python3 script.py "${sep="," endpoints}" ${cov_file} ${sex_col_name} ${is_binary} > samples.txt
 
     #get extract file
     plink2 \
@@ -246,13 +265,16 @@ __EOF__
     output{
         File extract_vars = "snps_pass.snplist"
         File samples = "samples.txt"
+        File males = "males.txt"
+        File females = "females.txt"
+        File sex_counts = "sex_counts.txt"
     }
 
     runtime {
 
         docker: "${docker}"
         cpu: 2
-        memory: "12 GB"
+        memory: "4 GB"
         disks: "local-disk 200 HDD"
         zones: "europe-west1-b europe-west1-c europe-west1-d"
         preemptible: 2
@@ -272,7 +294,7 @@ workflow regenie_step1 {
     File grm_bed
 
     call filter_mac{
-        input:grm_bed = grm_bed,cov_file=cov_pheno,endpoints= phenolist
+        input:grm_bed = grm_bed,cov_file=cov_pheno,endpoints= phenolist, sex_col_name=sex_col_name, is_binary=is_binary
     }
 
     call step1 {
@@ -289,5 +311,8 @@ workflow regenie_step1 {
         String covars_used = step1.covars_used
         Boolean is_single_sex = step1.is_single_sex
         File samples = filter_mac.samples
+        File males = filter_mac.males
+        File females = filter_mac.females
+        File sex_counts = filter_mac.sex_counts
     }
 }

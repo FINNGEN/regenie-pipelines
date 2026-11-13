@@ -19,6 +19,9 @@ task step2 {
     Int minmac = 5
     String options
     File samples
+    File males
+    File females
+    File sex_counts
 
     String docker
 
@@ -70,27 +73,6 @@ task step2 {
 
         if [[ "${run_sex_specific}" == "true" ]];
         then
-          zcat ${cov_pheno} | awk 'NR==1{ for(i=1;i<=NF;i++) {h[$i]=i};
-                                             if(!("${sex_col_name}" in h)) {
-                                                print "Given sex column not found in phenotype file" > "/dev/stderr";
-                                                exit 1;
-                                              }
-                                        }
-                                  NR>1&&$h["${sex_col_name}"]==0{ print $1,$1}' > males
-
-          zcat ${cov_pheno} | awk 'NR==1{  for(i=1;i<=NF;i++) {h[$i]=i };
-                                          if(!("${sex_col_name}" in h))
-                                          {
-                                            print "Given sex column not found in phenotype file" > "/dev/stderr";
-                                            exit 1;
-                                          }
-                                       }
-                                  NR>1&&$h["${sex_col_name}"]==1{ print $1,$1}' > females
-
-          # restrict sex-specific sample lists to the same sample set as the main run
-          for s in males females; do
-            awk 'FNR==NR { keep[$1]; next } $1 in keep' ${samples} $s > $s.tmp && mv $s.tmp $s
-          done
 
           sex_covars=$(echo ${covariates} | sed -e 's/${sex_col_name}//' | sed 's/^,//' | sed -e 's/,$//' | sed 's/,,/,/g')
 
@@ -101,14 +83,8 @@ task step2 {
 
           for p in ${sep=" " phenolist}; do
 
-            if [[ "${is_binary}" == "true" ]];
-            then
-                N_cases_females=$(awk -v pheno=$p 'FNR==NR { females[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in females {print $1}' females <(zcat ${cov_pheno}) | wc -l)
-                N_cases_males=$(awk -v pheno=$p 'FNR==NR { males[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]==1 && $1 in males {print $1}' males <(zcat ${cov_pheno}) | wc -l)
-            else 
-                N_cases_females=$(awk -v pheno=$p 'FNR==NR { females[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]!="NA" && $1 in females {print $1}' females <(zcat ${cov_pheno}) | wc -l)
-                N_cases_males=$(awk -v pheno=$p 'FNR==NR { males[$1]; next } FNR==1{ for(i=1;i<=NF;i++) {h[$i]=i} }; NR>1 && $h[pheno]!="NA" && $1 in males {print $1}' males <(zcat ${cov_pheno}) | wc -l)
-            fi 
+            # cases (binary) or non-NA samples (quant) per sex, precomputed in filter_mac
+            read N_cases_males N_cases_females <<< $(awk -v p=$p '$1==p {print $2,$3}' ${sex_counts})
 
             echo "Female cases: "$N_cases_females
             echo "Male cases: "$N_cases_males
@@ -156,7 +132,7 @@ task step2 {
                 fi 
             fi
 
-            for s in males females;
+            for s in ${males} ${females};
             do
               echo "running $s analysis"
               echo "$(wc -l $s) individuals in file"
@@ -180,7 +156,7 @@ task step2 {
               --threads $n_cpu \
               --minMAC ${minmac} \
               --gz \
-              --out ${prefix}".sex_spec."$s \
+              --out ${prefix}".sex_spec."$(basename $s .txt) \
               ${options}
             done
 
@@ -261,7 +237,7 @@ combs.to_csv(prefix+"."+pheno+".sex_spec.gz", compression="gzip", sep=" ", index
     runtime {
         docker: "${docker}"
         cpu: if length(phenolist) == 1 then 1 else if length(phenolist) <=4 then 2 else if length(phenolist) <= 10 then 4 else if length(phenolist) < 16 then 8 else 16
-        memory: if length(phenolist) <= 2 then "4 GB" else "6 GB"
+        memory: if length(phenolist) <= 2 then "2 GB" else "6 GB"
         disks: "local-disk " + (ceil(size(bgen, "G")) + 5) + " HDD"
         zones: "europe-west1-b europe-west1-c europe-west1-d"
         predefinedMachineType: predefined_machinetype
@@ -358,7 +334,7 @@ task gather {
         docker: "${docker}"
         cpu: 1
         memory: "8 GB"
-        disks: "local-disk 200 HDD"
+        disks: "local-disk 50 HDD"
         zones: "europe-west1-b europe-west1-c europe-west1-d"
         preemptible: 2
         noAddress: true
@@ -522,13 +498,16 @@ workflow regenie_step2 {
     Boolean run_sex_specific
     Int minmac = 5
     File samples
+    File males
+    File females
+    File sex_counts
 
     scatter (bgen in bgens) {
         call step2 {
             input: docker=docker, phenolist=phenolist, is_binary=is_binary, cov_pheno=cov_pheno,
               covariates=covariates, pred=pred, loco=loco, nulls=nulls,firth_list=firth_list,bgen=bgen,
               sex_col_name=sex_col_name, run_sex_specific=(run_sex_specific && !is_single_sex), minmac=minmac,
-              samples=samples
+              samples=samples, males=males, females=females, sex_counts=sex_counts
         }
     }
 
