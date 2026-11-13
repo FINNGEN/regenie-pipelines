@@ -22,6 +22,7 @@ task step2 {
 
     String docker
 
+    String predefined_machinetype
 
     Float sex_specific_logpval
     String sex_col_name
@@ -263,6 +264,7 @@ combs.to_csv(prefix+"."+pheno+".sex_spec.gz", compression="gzip", sep=" ", index
         memory: if length(phenolist) <= 2 then "4 GB" else "6 GB"
         disks: "local-disk " + (ceil(size(bgen, "G")) + 5) + " HDD"
         zones: "europe-west1-b europe-west1-c europe-west1-d"
+        predefinedMachineType: predefined_machinetype
         preemptible: 2
         noAddress: true
     }
