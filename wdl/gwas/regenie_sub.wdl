@@ -86,6 +86,11 @@ task step2 {
                                        }
                                   NR>1&&$h["${sex_col_name}"]==1{ print $1,$1}' > females
 
+          # restrict sex-specific sample lists to the same sample set as the main run
+          for s in males females; do
+            awk 'FNR==NR { keep[$1]; next } $1 in keep' ${samples} $s > $s.tmp && mv $s.tmp $s
+          done
+
           sex_covars=$(echo ${covariates} | sed -e 's/${sex_col_name}//' | sed 's/^,//' | sed -e 's/,$//' | sed 's/,,/,/g')
 
           if [[ $sex_covars == ${covariates} ]];
