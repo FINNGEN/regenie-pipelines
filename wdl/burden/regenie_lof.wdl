@@ -243,6 +243,14 @@ task regenie{
     String mask_type
     String sumstats_root
     Int mlogp_filter
+    # sumstats column names, looked up by name (default: FinnGen release layout)
+    String chr_col = "#chrom"
+    String pos_col = "pos"
+    String ref_col = "ref"
+    String alt_col = "alt"
+    String mlogp_col = "mlogp"
+    String beta_col = "beta"
+    String af_col = "af_alt"
   }
 
   Int disk_size = ceil(size(lof_bgen,"GB"))*2 + 10
@@ -267,49 +275,85 @@ task regenie{
   echo ~{cpus} ~{mem} $CPUS
   wc -l pred.txt
 
-  ####### SIG HITS FILTER
-  
-  # KEEP ONLY RELEVANT HITS (MLOGP > FILTER)
-  echo "HITS WITH MLOGP > THRESHOLD"
-  TMP_HITS="tmp_hits.txt"
-  paste <(zcat ~{regenie_results} | awk '$12>~{mlogp_filter}'  | cut -d " " -f 3 | cut -d . -f 1 | awk '{print $0"_GENESTRING"}') <(zcat ~{regenie_results} | awk '$12>~{mlogp_filter}' | cut -d " " -f 1,9,12) | sed -e 's/ /\t/g' > $TMP_HITS
+  ####### SIG HITS: for each gene with mlogp > mlogp_filter, look up its LoF variants in the GWAS sumstats,
+  # so the gene signal can be compared with its strongest variant.
+  # Command = scripts/tests/lof_sig_hits.sh: the parameter block maps the WDL inputs to the script's
+  # variables, the rest is the script body. Keep the two in sync.
+  REGENIE_RESULTS="~{regenie_results}"
+  SUMSTATS="~{sumstats}"
+  LOF_VARIANTS="~{lof_variants}"
+  MLOGP_FILTER="~{mlogp_filter}"
+  PHENO="~{pheno}"
+  OUT="~{pheno_comp}"
+  CHR_COL="~{chr_col}"; POS_COL="~{pos_col}"; REF_COL="~{ref_col}"; ALT_COL="~{alt_col}"
+  MLOGP_COL="~{mlogp_col}"; BETA_COL="~{beta_col}"; AF_COL="~{af_col}"
 
-  # GET GENE TO VAR MAPPING FOR ALL GENES WITH HTIS
-  cut -f 1,2 ~{lof_variants} | awk '{print $2"_GENESTRING\t"$1}' | sort -k1 | grep -wf <(cut -f1 $TMP_HITS ) > sig_genes.txt
-  wc -l sig_genes.txt $TMP_HITS
-  
-  # FOR SIG GENES GET DATA BY TABIXING FROM SUMSTATS
-  echo "RELEVANT GENES WITH SIG MLOGP"
-  TMP_VAR="tmp_sig_genes_variants.txt"
-  rm -f $TMP_VAR && touch $TMP_VAR
-  while read -a  line # for each gene that is a significant HIT tabix from sumstats data
-  do
-      GENE=${line[0]}
-      CHROM=${line[2]}
-      SUMSTATS_CHROM=${CHROM/X/23}  # sumstats use 23 for X
-      POS=${line[3]}
-      REF=${line[4]}
-      ALT=${line[5]}
-      paste <(echo -e $GENE"_GENESTRING\tchr"$CHROM"_"$POS"_"$REF"_"$ALT) <(tabix ~{sumstats} $SUMSTATS_CHROM:$POS-$POS | grep -w $REF | grep -w $ALT | cut -f 8,9,11) >> $TMP_VAR
-  done < <(cat  sig_genes.txt |  sed 's/chr//g' | tr '_' '\t' )
+  set -euo pipefail
+  export LC_ALL=C   # same collation for sort and join
 
-  # THIS IS THE PART TO BE JOINED WITH THE REGENIE RESULT (I COLLAPSE ALL VARIANT DATA FOR EACH GENE INTO A SINGLE LINE)
-  TMP_GENE_VAR_HIT="tmp_sig_hits_gene.txt"
-  rm -f $TMP_GENE_VAR_HIT && touch $TMP_GENE_VAR_HIT
-  while read GENE
-  do
-      TOP_MLOGP=$( grep -w $GENE $TMP_VAR|  cut -f3 | sort -gr  | head -n1 ) # grep gene and keep highest MLOGP
-      GENE_DATA=$(cat $TMP_VAR | grep -w $GENE | cut -f2- | tr '\t' ',' | tr '\n' ','| sed 's/.$//' ) # combine all lines into one
-      echo -e $GENE'\t'$TOP_MLOGP'\t'$GENE_DATA >> $TMP_GENE_VAR_HIT
-  done < <(cut -f1 $TMP_VAR | sort | uniq)
+  TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
-  # JOIN REGENIE RESULT WITH GENE VARIANT DATA
-  PHENO_GENE_HITS="results.txt"
-  echo -e "PHENO\tGENE\tCHROM\tGENE_BETA\tGENE_MLOGP\tTOP_VAR_MLOGP\tVAR1,MLOGP1,BETA1,AF1,VAR2..." > $PHENO_GENE_HITS 
-  PHENO=~{pheno}
-  join -t $'\t' <(sort -k1 $TMP_HITS) <(sort -k1 $TMP_GENE_VAR_HIT) | sed 's/_GENESTRING//g' | awk '{print "PNAME\t"$0}' | sed -e "s/PNAME/${PHENO}/g"  >> $PHENO_GENE_HITS
+  # 1. Genes with LOG10P > MLOGP_FILTER: gene <tab> chrom <tab> beta <tab> mlogp.
+  #    Regenie columns found by name (line 1 is the ##MASKS comment, line 2 the header).
+  zcat -f "$REGENIE_RESULTS" | awk -v OFS='\t' -v t="$MLOGP_FILTER" '
+    /^##/ { next }
+    !h {
+      for (i = 1; i <= NF; i++) c[$i] = i
+      n = split("ID CHROM BETA LOG10P", req, " ")
+      for (i = 1; i <= n; i++) if (!(req[i] in c)) { print "missing column in regenie results: " req[i] > "/dev/stderr"; exit 1 }
+      h = 1; next
+    }
+    $c["LOG10P"] != "NA" && $c["LOG10P"] + 0 > t + 0 {
+      g = $c["ID"]; sub(/\.Mask.*$/, "", g)   # GENE.Mask1.0.01 -> GENE (as merge_results does)
+      print g, $c["CHROM"], $c["BETA"], $c["LOG10P"]
+    }' | sort -k1,1 > "$TMP/hits.tsv"
 
-  mv $PHENO_GENE_HITS ~{pheno_comp}
+  # 2. Their LoF variants (exact gene match): gene <tab> variant
+  awk -F'\t' -v OFS='\t' 'FILENAME == ARGV[1] { hit[$1] = 1; next } ($2 in hit) { print $2, $1 }' \
+    "$TMP/hits.tsv" "$LOF_VARIANTS" > "$TMP/hit_variants.tsv"
+
+  # 3. One tabix call for all positions (sumstats use 23 for X)
+  awk -F'\t' -v OFS='\t' '{ split($2, v, "_"); c = substr(v[1], 4); if (c == "X") c = "23"; print c, v[2], v[2] }' \
+    "$TMP/hit_variants.tsv" | sort -u -k1,1V -k2,2n > "$TMP/regions.tsv"
+
+  # 4. Exact match on chrom/pos/ref/alt, sumstats columns by name.
+  #    Variants missing from the sumstats are kept with NA.
+  #    Output: gene <tab> variant <tab> mlogp <tab> beta <tab> af
+  { tabix -H "$SUMSTATS"; if [ -s "$TMP/regions.tsv" ]; then tabix -R "$TMP/regions.tsv" "$SUMSTATS"; fi; } \
+  | awk -F'\t' -v OFS='\t' \
+      -v cols="$CHR_COL,$POS_COL,$REF_COL,$ALT_COL,$MLOGP_COL,$BETA_COL,$AF_COL" '
+    FILENAME == ARGV[1] { gene[$2] = $1; order[++n] = $2; next }
+    FNR == 1 {
+      for (i = 1; i <= NF; i++) c[$i] = i
+      split(cols, k, ",")
+      for (i = 1; i <= 7; i++) if (!(k[i] in c)) { print "missing column in sumstats: " k[i] > "/dev/stderr"; failed = 1; exit 1 }
+      next
+    }
+    {
+      chrom = $c[k[1]]; sub(/^chr/, "", chrom); if (chrom == "23") chrom = "X"
+      id = "chr" chrom "_" $c[k[2]] "_" $c[k[3]] "_" $c[k[4]]
+      if ((id in gene) && !(id in found)) found[id] = $c[k[5]] OFS $c[k[6]] OFS $c[k[7]]
+    }
+    END {
+      if (failed) exit 1
+      for (i = 1; i <= n; i++) { id = order[i]; print gene[id], id, (id in found) ? found[id] : "NA" OFS "NA" OFS "NA" }
+    }
+  ' "$TMP/hit_variants.tsv" - > "$TMP/sig_variants.tsv"
+
+  # 5. One line per gene: gene <tab> top variant mlogp <tab> var1,mlogp1,beta1,af1,var2,...
+  awk -F'\t' -v OFS='\t' '
+    { d = $2 "," $3 "," $4 "," $5; data[$1] = ($1 in data) ? data[$1] "," d : d
+      if ($3 != "NA" && (!($1 in top) || $3 + 0 > top[$1] + 0)) top[$1] = $3 }
+    END { for (g in data) print g, (g in top) ? top[g] : "NA", data[g] }
+  ' "$TMP/sig_variants.tsv" | sort -k1,1 > "$TMP/gene_variants.tsv"
+
+  # 6. Join with the gene results
+  {
+    echo -e "PHENO\tGENE\tCHROM\tGENE_BETA\tGENE_MLOGP\tTOP_VAR_MLOGP\tVAR1,MLOGP1,BETA1,AF1,VAR2..."
+    join -t $'\t' "$TMP/hits.tsv" "$TMP/gene_variants.tsv" | awk -v OFS='\t' -v p="$PHENO" '{ print p, $0 }'
+  } > "$OUT"
+
+  echo "$PHENO: $(wc -l < "$TMP/hits.tsv") gene results with mlogp > $MLOGP_FILTER, $(wc -l < "$TMP/hit_variants.tsv") variants looked up, $(awk -F'\t' '$3 == "NA"' "$TMP/sig_variants.tsv" | wc -l) not in sumstats -> $OUT" >&2
 
   >>>
 

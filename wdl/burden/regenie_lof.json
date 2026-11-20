@@ -9,8 +9,8 @@
     "regenie_lof.n_batches": 50,
     
     #RELEASE SPECIFIC FILES
-    "regenie_lof.null_map": "gs://r14-data/lof/inputs/r14_nulls.txt",
-    "regenie_lof.regenie.sumstats_root": "gs://r14-data/regenie/release/summary_stats/PHENO.gz",
+    "regenie_lof.null_map": "gs://finngen-production-library-green/lof/inputs/r14_nulls_test.txt",
+    "regenie_lof.regenie.sumstats_root": "gs://finngen-production-library-green/finngen_R14/finngen_R14_analysis_data/summary_stats/release/PHENO.gz",
     "regenie_lof.cov_file": "gs://finngen-production-library-red/finngen_R14/analysis_covariates/data/R14_COV_PHENO_V0.FID.txt.gz",
     "regenie_lof.extract_variants.annot_file":"gs://finngen-production-library-green/finngen_R14/finngen_R14_analysis_data/annotations/R14_annotated_variants_v0.small.gz",
     "regenie_lof.chunk_manifest": "gs://finngen-production-library-green/wdl/conditional/bgen_chunks_manifest.tsv",
