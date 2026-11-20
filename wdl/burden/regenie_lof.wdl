@@ -342,7 +342,7 @@ task regenie{
 
   # 5. One line per gene: gene <tab> top variant mlogp <tab> var1,mlogp1,beta1,af1,var2,...
   awk -F'\t' -v OFS='\t' '
-    { d = $2 "," $3 "," $4 "," $5; data[$1] = ($1 in data) ? data[$1] "," d : d
+    { d = $2 "," $3 "," $4 "," $5; if ($1 in data) data[$1] = data[$1] "," d; else data[$1] = d   # no data[$1] = ($1 in data) ? ...: mawk creates the key first
       if ($3 != "NA" && (!($1 in top) || $3 + 0 > top[$1] + 0)) top[$1] = $3 }
     END { for (g in data) print g, (g in top) ? top[g] : "NA", data[g] }
   ' "$TMP/sig_variants.tsv" | sort -k1,1 > "$TMP/gene_variants.tsv"
