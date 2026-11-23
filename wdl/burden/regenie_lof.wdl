@@ -137,34 +137,38 @@ task merge_results {
   
 
   command <<<
-  # filter results
-  paste <(echo PHENO) <(zcat  ~{regenie_results[0]} | head -n2 | tail -n1 | tr ' ' '\t')   > ~{res_file} # write header
-  while read f
-  do pheno=$(basename $f .regenie.gz |sed 's/~{prefix}_lof_//g' )  && zcat  $f | sed -E 1,2d |  awk -v pheno="$pheno" '{print pheno" "$0}' |  tr ' ' '\t'   >> tmp.txt
-  done 	< ~{write_lines(regenie_results)}
-  
-  sort -grk 13 tmp.txt | grep -vw TEST_FAIL  >> ~{res_file}
-  cat tmp.txt | grep -w TEST_FAIL > ~{log_file}
-  # merge logs
-  while read f
-  do paste <( grep -q  "Elapsed" $f && echo 1 || echo 0 ) <(grep "phenoColList"  $f |  awk '{print $2}') <(echo $f| sed 's/\/cromwell_root/gs:\//g')  >> ~{checksum} && cat $f >> ~{log_file}
+  set -euo pipefail
+  # filter results. Header: PHENO + regenie columns (line 2 of the results; awk reads the whole file, no SIGPIPE under pipefail)
+  paste <(echo PHENO) <(zcat ~{regenie_results[0]} | awk 'NR == 2' | tr ' ' '\t') > ~{res_file}
+  : > tmp.txt
+  while read -r f
+  do pheno=$(basename "$f" .regenie.gz | sed 's/~{prefix}_lof_//g')
+     zcat "$f" | sed -E 1,2d | awk -v pheno="$pheno" '{print pheno" "$0}' | tr ' ' '\t' >> tmp.txt
+  done < ~{write_lines(regenie_results)}
+
+  # sort by LOG10P, column looked up in the header (fails if missing); failed tests go to the log
+  LOGP_COL=$(head -n1 ~{res_file} | tr '\t' '\n' | grep -nx LOG10P | cut -d: -f1)
+  sort -t $'\t' -k ${LOGP_COL},${LOGP_COL}gr tmp.txt | { grep -vw TEST_FAIL || true; } >> ~{res_file}
+  { grep -w TEST_FAIL tmp.txt || true; } > ~{log_file}
+  # merge logs. check: 1 if regenie finished (0 otherwise) <tab> pheno <tab> log path
+  while read -r f
+  do printf '%s\t%s\t%s\n' "$(grep -q Elapsed "$f" && echo 1 || echo 0)" "$(awk '$1 == "--phenoColList" { print $2; exit }' "$f")" "$(echo "$f" | sed 's/\/cromwell_root/gs:\//g')" >> ~{checksum}
+     cat "$f" >> ~{log_file}
   done < ~{write_lines(logs)}
 
   head -n1 ~{comp_files[0]} > ~{sig_file}
   cut -f1,4 ~{sets} > ~{var_file}
-  
-  while read f
-  do
 
-      cat $f | sed -E 1d | awk '{print $5-$6"\t"$0}'   >> sig_tmp.txt
-  done <  ~{write_lines(comp_files)}
+  : > sig_tmp.txt
+  while read -r f
+  do sed -E 1d "$f" | awk '{print $5-$6"\t"$0}' >> sig_tmp.txt
+  done < ~{write_lines(comp_files)}
   sort -rgk 1 sig_tmp.txt | cut -f2- | sed -e 's/ /\t/g' >> ~{sig_file}
 
-  touch ~{sql_file}
   #GZIP FILES
   bgzip ~{log_file} -c > ~{log_file}.gz
   bgzip ~{res_file} -c > ~{res_file}.gz
-  
+
   python3 <<EOF
   import sys,os,gzip,re
   import numpy as np
@@ -175,30 +179,34 @@ task merge_results {
     for line in i:
         gene,*_,variants = line.strip().split()
         gene_dict[gene] = variants
-        
+
+  # sql hits: columns by header name; any unexpected value fails the task instead of silently dropping the hit
+  rel = re.findall(r'\d+','~{prefix}')  # release number from prefix
+  if not rel: sys.exit("ERROR: no release number in prefix '~{prefix}'")
+  rel = rel[0]
   with open('~{sql_file}','wt') as o, open('~{res_file}') as i:
-    next(i) # go past header
-    rel = re.findall(r'\d+','~{prefix}')[0] #get release number from prefix
+    h = next(i).rstrip('\n').split('\t')
+    missing = [k for k in ['PHENO','ID','N','BETA','SE','LOG10P'] if k not in h]
+    if missing: sys.exit(f"ERROR: missing columns in {'~{res_file}'}: {missing}")
+    c = {k: n for n, k in enumerate(h)}
     for line in i:
-        pheno,_,_,gene,_,_,_,n,_,beta,se,_,mlogp,_ = line.strip().split()
-        try:
-            mlogp=float(mlogp)
-            if float(mlogp) > float('~{mlogp_filter}'):
-                gene = gene.split(".Mask")[0]
-                data = map(str,[rel,pheno,gene,gene_dict[gene],np.power(10,-float(mlogp)),beta,se,n])
-                o.write('"' + '","'.join(data) + '"\n')  
-  
-        except:
-            print(pheno,gene,mlogp)
-            
+        f = line.rstrip('\n').split('\t')
+        mlogp = f[c['LOG10P']]
+        if mlogp == 'NA' or float(mlogp) <= float('~{mlogp_filter}'):
+            continue
+        gene = f[c['ID']].split(".Mask")[0]
+        if gene not in gene_dict: sys.exit(f"ERROR: gene {gene} of {f[c['PHENO']]} not in the set list")
+        data = map(str,[rel,f[c['PHENO']],gene,gene_dict[gene],np.power(10,-float(mlogp)),f[c['BETA']],f[c['SE']],f[c['N']]])
+        o.write('"' + '","'.join(data) + '"\n')
+
   lof_list = f"[{'~{sep="," lof_list}'}]"
   tags = [("[PREFIX]",'~{prefix}'),("[N_GENES]",str(len(gene_dict))),("[MAF]",'~{max_maf}'),("[INFO]",'~{info}'),('[LOF_LIST]',lof_list),('[MLOGP]','~{mlogp_filter}')]
   with open('~{lof_template}') as i,open('~{readme}','wt') as o:
     for line in i:
         for tag in tags:
             line = line.replace(tag[0],tag[1])
-        o.write(line)     
-  EOF  
+        o.write(line)
+  EOF
 
   >>>
   
@@ -252,7 +260,6 @@ task regenie{
     String af_col = "af_alt"
   }
 
-  Int disk_size = ceil(size(lof_bgen,"GB"))*2 + 10
   File lof_index =  lof_bgen + ".bgi"
   File lof_sample = lof_bgen + ".sample"
   Map [String,File] pheno_map = {pheno:null}
@@ -264,8 +271,11 @@ task regenie{
   File tabix = sumstats + ".tbi"
   String pheno_comp = prefix + "_" + pheno + "_lof_sig_res.txt"
 
-  
+  # every localized input: lof bgen (x2 headroom), cov/pheno file, LOCO predictions, GWAS sumstats
+  Int disk_size = ceil(size(lof_bgen,"GB"))*2 + ceil(size(cov_file,"GB")) + ceil(size(null,"GB")) + ceil(size(sumstats,"GB")) + 10
+
   command <<<
+  set -euo pipefail
   CPUS=$(grep -c ^processor /proc/cpuinfo)
 
   # REGENIE
@@ -285,7 +295,6 @@ task regenie{
   CHR_COL="~{chr_col}"; POS_COL="~{pos_col}"; REF_COL="~{ref_col}"; ALT_COL="~{alt_col}"
   MLOGP_COL="~{mlogp_col}"; BETA_COL="~{beta_col}"; AF_COL="~{af_col}"
 
-  set -euo pipefail
   export LC_ALL=C   # same collation for sort and join
 
   TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
@@ -373,8 +382,9 @@ task regenie{
 
 
 task check_is_binary {
-  # From regenie-pipelines wdl/conditional-analysis/regenie_conditional_analysis.wdl (command unchanged):
-  # a pheno is binary (1) if its column only holds 0/1/NA, quantitative (0) otherwise.
+  # From regenie-pipelines wdl/conditional-analysis/regenie_conditional_analysis.wdl, with values compared as strings:
+  # a pheno is binary (1) if its column only holds the strings 0, 1 or NA (the binary coding regenie accepts),
+  # quantitative (0) otherwise -- e.g. 0.0/1.0 or empty values.
 
   input {
     String docker
@@ -402,17 +412,17 @@ task check_is_binary {
       {
         for (j=1;j<=n;j++) {
           p=names[j]
-          if (p in missing || p in bad) continue
+          if (p in missing || p in quantitative) continue
           v=$(idx[p])
-          if (v=="" || v=="NA") continue
-          if (v!=0 && v!=1) { bad[p]=1; remaining-- }
+          if (v=="NA") continue
+          if (v!="0" && v!="1") { quantitative[p]=1; remaining-- }
         }
         if (remaining==0) exit
       }
       END {
         for (j=1;j<=n;j++) {
           p=names[j]
-          print p"\t"(p in missing ? "NA" : (p in bad ? 0 : 1))
+          print p"\t"(p in missing ? "NA" : (p in quantitative ? 0 : 1))
         }
       }
     ' > ~{outfile}
