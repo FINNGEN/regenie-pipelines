@@ -40,7 +40,6 @@ workflow regenie_lof {
   # subset each batch of chunks to its lof variants
   # batches.tsv columns: batch id, comma-separated chunk bgens, comma-separated chunk .bgi indexes.
   # The comma -> newline + write_lines/read_lines round trip turns a column into an Array[File]
-  # (same trick as regenie-pipelines conditional-analysis).
   scatter (batch in read_tsv(select_chunks.batches)) {
     Array[File] batch_bgens = read_lines(write_lines([sub(batch[1], ",", "\n")]))
     Array[File] batch_bgis = read_lines(write_lines([sub(batch[2], ",", "\n")]))
@@ -277,8 +276,6 @@ task regenie{
 
   ####### SIG HITS: for each gene with mlogp > mlogp_filter, look up its LoF variants in the GWAS sumstats,
   # so the gene signal can be compared with its strongest variant.
-  # Command = scripts/tests/lof_sig_hits.sh: the parameter block maps the WDL inputs to the script's
-  # variables, the rest is the script body. Keep the two in sync.
   REGENIE_RESULTS="~{regenie_results}"
   SUMSTATS="~{sumstats}"
   LOF_VARIANTS="~{lof_variants}"
