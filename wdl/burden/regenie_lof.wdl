@@ -10,6 +10,7 @@ workflow regenie_lof {
     File chunk_manifest  # release bgen chunks: path, chrom, first pos, last pos (regenie-pipelines scripts/return_bgen_chunks_limits.sh)
     Int n_batches = 40   # max number of shards subsetting the chunks
     File cov_file        # phenotypes + covariates (FID IID ...)
+    Array[String] covariates  # filtered per pheno by filter_covariates
     String bargs_binary  # regenie step 2 options for binary phenos (0/1/NA only)
     String bargs_quant   # regenie step 2 options for quantitative phenos
     String docker
@@ -74,6 +75,16 @@ workflow regenie_lof {
   }
   Map[String,String] is_binary_map = read_map(check_is_binary.is_binary_tsv)
 
+  # covariates for each pheno (from regenie-pipelines conditional-analysis)
+  call filter_covariates {
+    input:
+      docker = docker,
+      pheno_file = cov_file,
+      pheno_list = write_lines(transpose(pheno_data)[0]),
+      covariates = covariates
+  }
+  Map[String,String] cov_map = read_map(filter_covariates.cov_pheno_map)
+
   scatter(p_data in pheno_data) {
     String pheno = p_data[0]
     Boolean is_binary = is_binary_map[pheno] == "1"
@@ -82,6 +93,7 @@ workflow regenie_lof {
         pheno = pheno,
         null = p_data[1],
         cov_file = cov_file,
+        covariates = cov_map[pheno],
         bargs = if is_binary then bargs_binary else bargs_quant,
         prefix = prefix,
         lof_variants = extract_variants.lof_variants,
@@ -729,5 +741,86 @@ task extract_variants {
     File lof_variants = "lof_variants.txt"
     File mask = "./mask.txt"
     File sets = "./sets.tsv"
+  }
+}
+
+task filter_covariates {
+  # Same rule as wdl/conditional-analysis filter_covariates: for each pheno (or space-separated group of phenos on
+  # one line of pheno_list), a covariate is kept if, for every pheno of the group, at least threshold_cov_count
+  # samples have a non-missing pheno and a non-missing, non-zero covariate.
+  # Computed in one chunked read: per chunk the (pheno x covariate) counts are one matrix product
+  # (pheno non-missing)^T x (covariate != 0), added to a running table, so memory is one chunk + the table
+  # instead of a samples x phenos matrix. Checked identical to the conditional task with
+  # scripts/tests/filter_covariates_chunks.py. The docker needs python3 with pandas and numpy.
+
+  input {
+    String docker
+    File pheno_file
+    Array[String] covariates
+    File pheno_list
+    Int threshold_cov_count
+    Int chunksize = 50000
+  }
+
+  String outfile = "./pheno_cov_map_" + threshold_cov_count + ".txt"
+  Int disk_size = ceil(size(pheno_file,'GB')) + 2 * 2
+
+  command <<<
+    set -euxo pipefail
+
+    python3 - "~{pheno_file}" "~{pheno_list}" "~{write_lines(covariates)}" ~{threshold_cov_count} ~{chunksize} "~{outfile}" <<'CODE'
+    import sys
+    import numpy as np
+    import pandas as pd
+
+    pheno_file, pheno_list, cov_list, th, chunksize, outfile = sys.argv[1:]
+    th, chunksize = int(th), int(chunksize)
+    with open(pheno_list) as f:
+        groups = [line.split() for line in f if line.strip()]
+    with open(cov_list) as f:
+        covariates = [line.strip() for line in f if line.strip()]
+    phenos = list(dict.fromkeys(p for g in groups for p in g))
+
+    header = pd.read_csv(pheno_file, sep="\t", nrows=0).columns
+    missing = [c for c in phenos + covariates if c not in header]
+    if missing:
+        sys.exit(f"ERROR: columns not in {pheno_file}: {missing}")
+    cov_order = [c for c in header if c in set(covariates)]   # file column order, as in the conditional task
+
+    counts = np.zeros((len(phenos), len(cov_order)))
+    rows = 0
+    for chunk in pd.read_csv(pheno_file, sep="\t", usecols=list(dict.fromkeys(phenos + cov_order)), chunksize=chunksize):
+        p_mask = chunk[phenos].notna().to_numpy(dtype=np.float64)          # rows x phenos
+        c_mask = (chunk[cov_order].abs() > 0).to_numpy(dtype=np.float64)    # rows x covariates (NaN > 0 is False)
+        counts += p_mask.T @ c_mask   # float64 holds these integer counts exactly
+        rows += len(chunk)
+        print(f"{rows} rows", flush=True)
+    counts = np.rint(counts).astype(int)
+    idx = {p: i for i, p in enumerate(phenos)}
+
+    with open(outfile, "wt") as o, open(outfile.replace(".txt", ".err.txt"), "wt") as e:
+        for group in groups:
+            name = ",".join(group)
+            keep = [c for j, c in enumerate(cov_order) if min(counts[idx[p], j] for p in group) >= th]
+            dropped = [c for c in cov_order if c not in keep]
+            if dropped:
+                e.write(f"{name}\t{','.join(dropped)}\n")
+            o.write(f"{name}\t{','.join(keep)}\n")
+    CODE
+  >>>
+
+  output {
+    File cov_pheno_map = outfile
+    File cov_pheno_warning = sub(outfile,'.txt','.err.txt')
+  }
+
+  runtime {
+    docker: "~{docker}"
+    cpu: "1"
+    memory: "8 GB"
+    disks: "local-disk ${disk_size} HDD"
+    zones: "europe-west1-b europe-west1-c europe-west1-d"
+    preemptible: 2
+    maxRetries: 2
   }
 }
