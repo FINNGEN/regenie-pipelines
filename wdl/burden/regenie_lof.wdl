@@ -164,7 +164,7 @@ task merge_results {
   { grep -w TEST_FAIL tmp.txt || true; } > ~{log_file}
   # merge logs. check: 1 if regenie finished (0 otherwise) <tab> pheno <tab> log path
   while read -r f
-  do printf '%s\t%s\t%s\n' "$(grep -q Elapsed "$f" && echo 1 || echo 0)" "$(awk '$1 == "--phenoColList" { print $2; exit }' "$f")" "$(echo "$f" | sed 's/\/cromwell_root/gs:\//g')" >> ~{checksum}
+  do printf '%s\t%s\t%s\n' "$(grep -q Elapsed "$f" && echo 1 || echo 0)" "$(awk '$1 == "--phenoColList" { print $2; exit }' "$f")" "$(echo "$f" | sed 's|^.*/cromwell_root/|gs://|')" >> ~{checksum}
      cat "$f" >> ~{log_file}
   done < ~{write_lines(logs)}
 
@@ -217,7 +217,7 @@ task merge_results {
     for line in i:
         for tag in tags:
             line = line.replace(tag[0],tag[1])
-        o.write(line)
+        o.write(line if line.endswith('\n') else line + '\n')  # template may lack a final newline
   EOF
 
   >>>
