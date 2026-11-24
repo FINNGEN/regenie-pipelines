@@ -1,0 +1,25 @@
+{
+  "regenie_lof.phenos": [
+    "BMI_IRN",
+    "HEIGHT_IRN",
+    "WEIGHT_IRN"
+  ],
+  "regenie_lof.sets": "gs://fg-cromwell-refinery2/regenie_lof/c3eac9fd-5bbc-4533-887b-3a320fba12b0/call-extract_variants/sets.tsv",
+  "regenie_lof.lof_list": ["frameshift_variant","splice_donor_variant","stop_gained","splice_acceptor_variant"],
+  "regenie_lof.regenie.mask_type": "max",
+  "regenie_lof.regenie.cov_file": "gs://finngen-production-library-red/finngen_R14/analysis_covariates/data/R14_COV_PHENO_V0.FID.txt.gz",
+  "regenie_lof.regenie.cpus": 2,
+  "regenie_lof.regenie.bargs": "--bsize 400 --gz --ignore-pred --approx --pThresh 0.01 --ref-first",
+  "regenie_lof.mask": "gs://fg-cromwell-refinery2/regenie_lof/c3eac9fd-5bbc-4533-887b-3a320fba12b0/call-extract_variants/mask.txt",
+  "regenie_lof.lof_variants": "gs://fg-cromwell-refinery2/regenie_lof/c3eac9fd-5bbc-4533-887b-3a320fba12b0/call-extract_variants/lof_variants.txt",
+  "regenie_lof.regenie.sumstats_root": "gs://r14-data/regenie/release/summary_stats/PHENO.gz",
+  "regenie_lof.lof_bgen": "gs://fg-cromwell-refinery2/regenie_lof/853135bc-2532-41ae-a6e2-9fd870409a20/call-merge/lof.bgen",
+  "regenie_lof.docker": "europe-docker.pkg.dev/finngen-refinery-dev/eu.gcr.io/bioinformatics:0.8.2-squashed",
+  "regenie_lof.regenie.docker": "europe-west1-docker.pkg.dev/finngen-refinery-dev/fg-refinery-registry/regenie:3.3_r12_cond_hla",
+  "regenie_lof.regenie.covariates": "SEX_IMPUTED,AGE_AT_DEATH_OR_END_OF_FOLLOWUP,PC{1:10},IS_FINNGEN2_CHIP,BATCH_DS1_BOTNIA_Dgi_norm,BATCH_DS10_FINRISK_Palotie_norm,BATCH_DS11_FINRISK_PredictCVD_COROGENE_Tarto_norm,BATCH_DS12_FINRISK_Summit_norm,BATCH_DS13_FINRISK_Bf_norm,BATCH_DS14_GENERISK_norm,BATCH_DS15_H2000_Broad_norm,BATCH_DS16_H2000_Fimm_norm,BATCH_DS17_H2000_Genmets_norm_relift,BATCH_DS18_MIGRAINE_1_norm_relift,BATCH_DS19_MIGRAINE_2_norm,BATCH_DS2_BOTNIA_T2dgo_norm,BATCH_DS20_SUPER_1_norm_relift,BATCH_DS21_SUPER_2_norm_relift,BATCH_DS22_TWINS_1_norm,BATCH_DS23_TWINS_2_norm_nosymmetric,BATCH_DS24_SUPER_3_norm,BATCH_DS25_BOTNIA_Regeneron_norm,BATCH_DS26_DIREVA_norm,BATCH_DS27_NFBC66_norm,BATCH_DS28_NFBC86_norm,BATCH_DS3_COROGENE_Sanger_norm,BATCH_DS4_FINRISK_Corogene_norm,BATCH_DS5_FINRISK_Engage_norm,BATCH_DS6_FINRISK_FR02_Broad_norm_relift,BATCH_DS7_FINRISK_FR12_norm,BATCH_DS8_FINRISK_Finpcga_norm,BATCH_DS9_FINRISK_Mrpred_norm",
+  "regenie_lof.prefix": "finngen_R14",
+  "regenie_lof.max_maf": 0.01,
+  "regenie_lof.info_filter": 0.8,
+  "regenie_lof.mlogp_filter": 3,
+  "regenie_lof.merge_results.lof_template": "gs://finngen-production-library-green/lof/lof.README"
+}

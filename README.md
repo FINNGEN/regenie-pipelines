@@ -209,3 +209,87 @@ The chains are merged into one `independent_snps` file per pheno.
 ### PHEWEB IMPORT
 
 The pheweb import munging is not part of the main wdl. There is a separate [`pheweb_import.wdl`](wdl/conditional-analysis/pheweb_import.wdl) that builds the sql import file and munges the regenie outputs, dealing with the files in chunks since the number of files in a release is large. The relevant inputs are the lists of paths for the conditional chains and the regenie outputs, plus the regions file, which are part of the release anyways.
+
+## FINNGEN LOF BURDEN
+
+Gene-based loss-of-function burden test with [regenie](https://rgcgithub.github.io/regenie/) step 2 in burden mode. Starting from the variant annotation and the release bgen chunks, it selects the rare, well imputed LoF variants, builds a single bgen holding only those variants, collapses them into one mask per gene and tests every pheno in `null_map`, reusing the step 1 nulls of the standard GWAS. Binary and quantitative phenos run in the same workflow.
+
+The pipeline used to live in [FINNGEN/LOFanalysis](https://github.com/FINNGEN/LOFanalysis). [`regenie_lof.wdl`](wdl/burden/regenie_lof.wdl) + [`regenie_lof.json`](wdl/burden/regenie_lof.json) are the current version, to be edited release over release. [`wdl/burden/legacy/`](wdl/burden/legacy/) keeps the input jsons of past releases (R8 to R14) as a record of what was run: they were written for older versions of the wdl (bgen built from the imputed VCFs, separate quantitative wdl), so they don't run against the current one.
+
+The sandbox (unmodifiable pipeline) versions live in the `sandbox-unmodifiable-pipelines` repo (`wdl/burden/{df14,df13,other}`). They are independently maintained copies, so changes here need to be ported there by hand.
+
+### WDL
+
+#### Inputs
+
+```
+"regenie_lof.prefix": "finngen_R14",
+"regenie_lof.max_maf": 0.01,
+"regenie_lof.info_filter": 0.8,
+"regenie_lof.mlogp_filter": 3,
+"regenie_lof.gene_variants_min_count": 1,
+"regenie_lof.lof_list": ["frameshift_variant","splice_donor_variant","stop_gained","splice_acceptor_variant"],
+"regenie_lof.n_batches": 50,
+"regenie_lof.null_map": "gs://r14-data/lof/inputs/r14_nulls.txt",
+"regenie_lof.cov_file": "gs://finngen-production-library-red/finngen_R14/analysis_covariates/data/R14_COV_PHENO_V0.FID.txt.gz",
+"regenie_lof.extract_variants.annot_file": "gs://finngen-production-library-green/finngen_R14/finngen_R14_analysis_data/annotations/R14_annotated_variants_v0.small.gz",
+"regenie_lof.chunk_manifest": "gs://finngen-production-library-green/wdl/conditional/bgen_chunks_manifest.tsv",
+"regenie_lof.docker": "eu.gcr.io/finngen-sandbox-v3-containers/regenie:4.1.2_cond_bgenix",
+"regenie_lof.bargs_binary": "--bt --bsize 400 --gz --firth --approx --pThresh 0.01 --firth-se --ref-first",
+"regenie_lof.bargs_quant": "--bsize 400 --gz --approx --pThresh 0.01 --ref-first",
+"regenie_lof.covariates": ["SEX_IMPUTED", "AGE_AT_DEATH_OR_END_OF_FOLLOWUP", "PC1", ..., "BATCH_DS9_FINRISK_Mrpred_norm"],
+"regenie_lof.threshold_cov_count": 10,
+```
+`prefix` is the prefix of all output files. The release number for the sql file is taken from it, so it has to contain one.
+`max_maf` and `info_filter` are the variant filters (see `extract_variants`). `max_maf` is also passed to regenie as `--aaf-bins`.
+`lof_list` are the VEP consequences (`most_severe` column of the annotation) that count as LoF.
+`gene_variants_min_count` drops genes with fewer LoF variants than this.
+`null_map` is a tab separated file with no header: `pheno` and the path to its step 1 `*.loco.gz` predictions.
+`cov_file` holds both the phenos and the covariates (FID/IID columns).
+`covariates` are the regenie covariates, as explicit column names (no `PC{1:10}` ranges); `threshold_cov_count` is the minimum count used to filter them per pheno (see `filter_covariates`).
+`chunk_manifest` is the same bgen chunk manifest used by the conditional analysis, built with [`scripts/return_bgen_chunks_limits.sh`](scripts/return_bgen_chunks_limits.sh).
+`n_batches` caps the number of shards that subset the chunks (see `select_chunks`).
+`bargs_binary`/`bargs_quant` are the regenie step 2 options, one of which is picked per pheno by `check_is_binary`.
+`mlogp_filter` is the threshold for the hit summaries and the sql file.
+
+#### extract_variants
+Selects the LoF variants from `annot_file` in one pass, finding the columns by header name (`#variant`, `AF`, `INFO`, `most_severe`, `gene_most_severe`); a missing column fails the run. A variant is kept if its `most_severe` consequence is in `lof_list`, `0 < MAF < max_maf` with `MAF = min(AF, 1-AF)`, and `INFO > info_filter`. Variants with missing AF or INFO are dropped. The log reports how many LoF variants each filter removed. The same logic is available as a standalone script in LOFanalysis (`scripts/extract_variants.sh`).
+
+Variant IDs are `chrN_pos_ref_alt`, with `chrX` for chromosome 23 as in the bgen chunks. The outputs are the three regenie burden inputs:
+- `lof_variants.txt`: annotation file, `variant gene consequence`
+- `sets.tsv`: set list, `gene chrom pos variant1,variant2,...`
+- `mask.txt`: a single mask `Mask1` with all the consequences present
+
+#### select_chunks
+Assigns each LoF variant to the bgen chunk whose bounds contain it, using `chunk_manifest`; a variant outside every chunk fails the run. The chunks that hold at least one LoF variant are then split into at most `n_batches` contiguous batches in manifest order (chr1..chr22, chrX, by position), so that concatenating the batches in order keeps the bgen sorted. The sample file is taken from the first chunk (`<chunk>.bgen.sample`), since all chunks share the same samples.
+
+#### subset_chunks
+One shard per batch. Each chunk is subset to its LoF variants with `bgenix -incl-rsids` (matching on the bgen rsid field, using the chunk's `.bgi` index), and the subsets are concatenated with `cat-bgen` into one bgen per batch. Genotypes are copied as they are, there is no format conversion.
+
+#### merge_bgen
+Concatenates the batch bgens into `lof.bgen`, indexes it and checks that it contains exactly the requested variants: any missing or unexpected variant fails the run.
+
+#### check_is_binary
+Same task as in the conditional analysis: a pheno is binary if its column only holds `0`/`1`/missing, quantitative otherwise, so binary phenos need 0/1 coding. A pheno missing from `cov_file` fails the run.
+
+#### filter_covariates
+Same rule as in the conditional analysis: for each pheno, a covariate is kept only if at least `threshold_cov_count` samples have a non-missing pheno and a non-missing, non-zero covariate (e.g. a genotyping batch with no samples measured for a quantitative trait is dropped). The counts are computed in one chunked pass over `cov_file`, so memory does not depend on the number of samples. A pheno or covariate missing from `cov_file` fails the run. Output: pheno <tab> comma-separated covariates, passed to the regenie shards.
+
+#### regenie
+One shard per pheno. Runs regenie step 2 on `lof.bgen` with `--build-mask`, `--mask-def`, `--set-list`, `--anno-file` and `--aaf-bins max_maf`.
+```
+"regenie_lof.regenie.mask_type": "max",
+"regenie_lof.regenie.cpus": 2,
+"regenie_lof.regenie.sumstats_root": "gs://r14-data/regenie/release/summary_stats/PHENO.gz",
+```
+`mask_type` is the regenie `--build-mask` rule for combining the variants of a gene.
+`sumstats_root` is the `PHENO`-templated path to the (tabixed) GWAS sumstats. For each gene with `mlogp > mlogp_filter`, the single-variant results of its LoF variants are looked up there, so that the gene signal can be compared with its strongest variant.
+
+#### merge_results
+Merges the per-pheno results into the release files:
+- `[PREFIX]_lof.txt.gz`: all results, sorted by mlogp (failed tests, `LOG10P` `NA` and `EXTRA` `TEST_FAIL`, at the bottom)
+- `[PREFIX]_sig.txt`: genes with `mlogp > mlogp_filter`, with the single-variant data of their variants, sorted by the difference between the gene mlogp and its top variant mlogp
+- `[PREFIX]_lof.sql.txt`: the hits above `mlogp_filter`, for the sql import
+- `[PREFIX]_lof_variants.txt`: the variants used for each gene
+- `[PREFIX]_lof_summary.txt`: one line per pheno parsed from the regenie logs (`PHENO TRAIT N N_CASES N_CONTROLS N_COV SETS_TESTED FIRTH_TESTS FAILED_TESTS LOW_MAC_IGNORED REGENIE_VERSION ELAPSED_S`), same as the sandbox burden summary. If a field can't be parsed (e.g. a new regenie log format) the summary is left empty, header only, with a warning. The raw regenie logs are not part of the outputs (they repeat paths, covariate names and sample counts); they stay in the regenie shards' execution folders
+- `[PREFIX]_lof_readme`: release readme. Its template is in the `merge_results` command; `[PREFIX]`, `[MAF]`, `[INFO]`, `[LOF_LIST]`, `[MLOGP]`, `[COV_COUNT]` and `[N_GENES]` are replaced with the run's values.
