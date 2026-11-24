@@ -11,6 +11,7 @@ workflow regenie_lof {
     Int n_batches = 40   # max number of shards subsetting the chunks
     File cov_file        # phenotypes + covariates (FID IID ...)
     Array[String] covariates  # filtered per pheno by filter_covariates
+    Int threshold_cov_count = 10  # filter_covariates: min samples with non-missing pheno and non-zero covariate
     String bargs_binary  # regenie step 2 options for binary phenos (0/1/NA only)
     String bargs_quant   # regenie step 2 options for quantitative phenos
     String docker
@@ -81,7 +82,8 @@ workflow regenie_lof {
       docker = docker,
       pheno_file = cov_file,
       pheno_list = write_lines(transpose(pheno_data)[0]),
-      covariates = covariates
+      covariates = covariates,
+      threshold_cov_count = threshold_cov_count
   }
   Map[String,String] cov_map = read_map(filter_covariates.cov_pheno_map)
 
@@ -116,7 +118,8 @@ workflow regenie_lof {
       max_maf = max_maf,
       info = info_filter,
       lof_list = lof_list,
-      mlogp_filter = mlogp_filter
+      mlogp_filter = mlogp_filter,
+      cov_count = threshold_cov_count
   }
 
 }
@@ -132,20 +135,19 @@ task merge_results {
     File sets
     # README STUFF
     String prefix
-    File lof_template
     String max_maf
     Int mlogp_filter
     Array[String] lof_list
     String info
+    Int cov_count
   }
 
   String res_file = prefix + "_lof.txt" # file with all hits
   String sig_file = prefix + "_sig.txt" # file with sig hits (and variant comparison)
-  String log_file = prefix + "_lof.log" # file with merged logs
   String sql_file = prefix + "_lof.sql.txt" # file for sql import 
   String readme   = prefix + "_lof_readme" # output readme 
   String var_file = prefix + "_lof_variants.txt" # list of variants used
-  String checksum = prefix + "_check.log" # check that all ran or not
+  String summary_file = prefix + "_lof_summary.txt" # one line per pheno, parsed from the regenie logs
   
 
   command <<<
@@ -158,15 +160,73 @@ task merge_results {
      zcat "$f" | sed -E 1,2d | awk -v pheno="$pheno" '{print pheno" "$0}' | tr ' ' '\t' >> tmp.txt
   done < ~{write_lines(regenie_results)}
 
-  # sort by LOG10P, column looked up in the header (fails if missing); failed tests go to the log
+  # sort by LOG10P, column looked up in the header (fails if missing). Failed tests (LOG10P NA, EXTRA TEST_FAIL)
+  # stay in the results, at the bottom: one file with every test
   LOGP_COL=$(head -n1 ~{res_file} | tr '\t' '\n' | grep -nx LOG10P | cut -d: -f1)
-  sort -t $'\t' -k ${LOGP_COL},${LOGP_COL}gr tmp.txt | { grep -vw TEST_FAIL || true; } >> ~{res_file}
-  { grep -w TEST_FAIL tmp.txt || true; } > ~{log_file}
-  # merge logs. check: 1 if regenie finished (0 otherwise) <tab> pheno <tab> log path
-  while read -r f
-  do printf '%s\t%s\t%s\n' "$(grep -q Elapsed "$f" && echo 1 || echo 0)" "$(awk '$1 == "--phenoColList" { print $2; exit }' "$f")" "$(echo "$f" | sed 's|^.*/cromwell_root/|gs://|')" >> ~{checksum}
-     cat "$f" >> ~{log_file}
-  done < ~{write_lines(logs)}
+  sort -t $'\t' -k ${LOGP_COL},${LOGP_COL}gr tmp.txt >> ~{res_file}
+
+  # Run summary instead of the raw regenie logs, which repeat input values (paths, covariate names) and sample
+  # counts, so nothing of them is released as is. Same as the sandbox burden wdl: only allowlisted fields, each
+  # parsed from the regenie log with a fixed pattern (digits, the regenie version, the pheno name). If any required
+  # field can't be parsed for any pheno (e.g. a new regenie log format), the summary is left empty (header only)
+  # with a warning, never copied raw.
+  cat << "__EOF__" > summarize_logs.py
+  import os, re, sys
+
+  COLS = ["PHENO", "TRAIT", "N", "N_CASES", "N_CONTROLS", "N_COV", "SETS_TESTED", "FIRTH_TESTS", "FAILED_TESTS",
+          "LOW_MAC_IGNORED", "REGENIE_VERSION", "ELAPSED_S"]
+  INT = r"([0-9]{1,12})"
+  END = r"[ \t]*$"
+
+  def parse(text, phenos):
+      def one(pat, required=True):
+          # the field may be printed more than once, but always with the same value
+          vals = set(re.findall(pat, text, re.M))
+          if len(vals) == 1:
+              return vals.pop()
+          if not vals and not required:
+              return "NA"
+          raise ValueError(pat)
+      pheno = one(r"^  --phenoColList ([A-Za-z0-9_-]{1,200}) \\" + END)
+      if pheno not in phenos:
+          raise ValueError("pheno")
+      # bargs_quant has no --qt: quantitative unless --bt
+      bt = re.search(r"^  --bt \\" + END, text, re.M) is not None
+      r = {"PHENO": pheno, "TRAIT": "binary" if bt else "quantitative"}
+      r["N"] = one(r"^ \* number of individuals used in analysis = " + INT + END)
+      if bt:
+          r["N_CASES"], r["N_CONTROLS"] = one(r"^   - '" + re.escape(pheno) + "': " + INT + " cases and " + INT + " controls" + END)
+          if int(r["N_CASES"]) + int(r["N_CONTROLS"]) != int(r["N"]):
+              raise ValueError("cases + controls != N")
+      else:
+          r["N_CASES"] = r["N_CONTROLS"] = "NA"
+      r["N_COV"] = one(r"\] n_cov = " + INT + END)
+      r["SETS_TESTED"] = one(r"^ \* # tested sets +: \[" + INT + r"\]" + END)
+      # only printed in some modes (e.g. Firth for binary traits)
+      r["FIRTH_TESTS"] = one(r"^Number of tests with Firth correction : " + INT + END, False)
+      r["FAILED_TESTS"] = one(r"^Number of failed tests : \(" + INT + r"/[0-9]{1,12}\)" + END, False)
+      r["LOW_MAC_IGNORED"] = one(r"^Number of ignored tests due to low MAC : " + INT + END, False)
+      r["REGENIE_VERSION"] = one(r"\|\s+REGENIE v([0-9]{1,3}\.[0-9]{1,3}(?:\.[0-9]{1,3})?)[A-Za-z0-9.]*\s+\|" + END)
+      r["ELAPSED_S"] = one(r"^Elapsed time : ([0-9]{1,9}(?:\.[0-9]{1,6})?)s" + END)
+      return r
+
+  logs_list, results_list, prefix = sys.argv[1:4]
+  phenos = {os.path.basename(l.strip())[len(prefix + "_lof_"):-len(".regenie.gz")] for l in open(results_list) if l.strip()}
+  rows = []
+  try:
+      for l in open(logs_list):
+          if l.strip():
+              rows.append(parse(open(l.strip(), encoding="utf-8", errors="replace").read(), phenos))
+      if sorted(r["PHENO"] for r in rows) != sorted(phenos):
+          raise ValueError("phenos")
+  except ValueError as e:
+      print(f"WARNING: could not parse the regenie logs ({e}): log summary left empty", file=sys.stderr)
+      rows = []
+  print("\t".join(COLS))
+  for r in sorted(rows, key=lambda r: r["PHENO"]):
+      print("\t".join(r[c] for c in COLS))
+  __EOF__
+  python3 summarize_logs.py ~{write_lines(logs)} ~{write_lines(regenie_results)} ~{prefix} > ~{summary_file}
 
   head -n1 ~{comp_files[0]} > ~{sig_file}
   cut -f1,4 ~{sets} > ~{var_file}
@@ -178,8 +238,35 @@ task merge_results {
   sort -rgk 1 sig_tmp.txt | cut -f2- | sed -e 's/ /\t/g' >> ~{sig_file}
 
   #GZIP FILES
-  bgzip ~{log_file} -c > ~{log_file}.gz
   bgzip ~{res_file} -c > ~{res_file}.gz
+
+  # README template: [TAGS] are filled in below
+  cat > readme_template.md <<'README'
+  # FINNGEN LOF RESULTS
+
+  ## [PREFIX] lof data
+
+  The pipeline takes the release variant annotation (VEP, https://github.com/Ensembl/ensembl-vep) and selects the lof variants, defined as having a consequence in the list [LOF_LIST]. A max_maf ([MAF]) and a minimum info score ([INFO]) filter are also applied. This leaves [N_GENES] genes that can be used for the association tests.
+
+  The release bgen chunks that contain lof variants are then subset to those variants and merged into a single bgen, so the whole analysis runs on one data set. The bgen is passed to step 2 of regenie in burden mode (one mask per gene), using the LOCO predictions from the standard GWAS null models. Binary and quantitative phenotypes are detected automatically. For each phenotype, covariates with fewer than [COV_COUNT] samples having a non-missing phenotype and a non-zero covariate value are left out. Tests that fail to converge are kept in the results with LOG10P NA and EXTRA TEST_FAIL.
+
+
+  ## File structure
+
+  ### Data
+  | File |  Description  |
+  |---|---|
+  |[PREFIX]_lof.txt.gz | Merged results of all phenotypes and genes, sorted by mlogp. Failed tests (LOG10P NA, EXTRA TEST_FAIL) are at the bottom. |
+  |[PREFIX]_lof_variants.txt | The lof variants used for each gene: gene, comma-separated variants. |
+  |[PREFIX]_sig.txt | Summary of the results with mlogp > [MLOGP]: gene results together with the results of its lof variants in the phenotype's GWAS. Sorted by the difference between the gene mlogp and the max mlogp of its variants. |
+  |[PREFIX]_lof.sql.txt | Results with mlogp > [MLOGP], formatted for database import. |
+
+  ### Documentation
+
+  | File |  Description  |
+  |---|---|
+  |[PREFIX]_lof_summary.txt | Run summary, one line per phenotype: trait type, sample size (cases/controls), number of covariates, sets tested, Firth and failed tests, regenie version and run time. |
+  README
 
   python3 <<EOF
   import sys,os,gzip,re
@@ -212,12 +299,12 @@ task merge_results {
         o.write('"' + '","'.join(data) + '"\n')
 
   lof_list = f"[{'~{sep="," lof_list}'}]"
-  tags = [("[PREFIX]",'~{prefix}'),("[N_GENES]",str(len(gene_dict))),("[MAF]",'~{max_maf}'),("[INFO]",'~{info}'),('[LOF_LIST]',lof_list),('[MLOGP]','~{mlogp_filter}')]
-  with open('~{lof_template}') as i,open('~{readme}','wt') as o:
+  tags = [("[PREFIX]",'~{prefix}'),("[N_GENES]",str(len(gene_dict))),("[MAF]",'~{max_maf}'),("[INFO]",'~{info}'),('[LOF_LIST]',lof_list),('[MLOGP]','~{mlogp_filter}'),('[COV_COUNT]','~{cov_count}')]
+  with open('readme_template.md') as i,open('~{readme}','wt') as o:
     for line in i:
         for tag in tags:
             line = line.replace(tag[0],tag[1])
-        o.write(line if line.endswith('\n') else line + '\n')  # template may lack a final newline
+        o.write(line)
   EOF
 
   >>>
@@ -238,8 +325,7 @@ task merge_results {
     File sql_hits = sql_file
     File variants = var_file
     File read     = readme 
-    File log      = log_file + '.gz'
-    File check    = checksum
+    File summary  = summary_file
   }  
 }
 
