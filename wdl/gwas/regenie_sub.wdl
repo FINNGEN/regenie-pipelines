@@ -62,7 +62,7 @@ task step2 {
         --minMAC ${minmac} \
         --gz \
         --out ${prefix} \
-        ${options}
+        ${options} >> regenie_${prefix}.log 2>&1
 
 
         if [[ "${run_sex_specific}" == "true" ]];
@@ -173,7 +173,7 @@ task step2 {
               --minMAC ${minmac} \
               --gz \
               --out ${prefix}".sex_spec."$s \
-              ${options}
+              ${options} >> regenie_${prefix}.log 2>&1
             done
 
             echo "all files"
